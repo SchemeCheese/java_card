@@ -115,6 +115,236 @@ public class SimulatorService {
         return false;
     }
 
+    // --- QUẢN LÝ SÁCH MƯỢN ---
+    
+    // Mock data cho sách có thể mượn
+    private static final String[][] AVAILABLE_BOOKS = {
+        {"NV001", "Nhà Giả Kim"},
+        {"DB002", "Đắc Nhân Tâm"},
+        {"TH003", "Trên Đường Băng"},
+        {"CX004", "Cà Phê Cùng Tony"},
+        {"HP005", "Harry Potter"},
+        {"LT006", "Lược Sử Thời Gian"},
+        {"TN007", "Tuổi Trẻ Đáng Giá Bao Nhiêu"},
+        {"NL008", "Nhà Lãnh Đạo Không Chức Danh"}
+    };
+    
+    // Lưu sách mượn theo studentCode
+    private java.util.Map<String, java.util.List<models.BorrowedBook>> studentBooks = new java.util.HashMap<>();
+    
+    /**
+     * Lấy danh sách sách đang mượn của sinh viên
+     */
+    public java.util.List<models.BorrowedBook> getBorrowedBooks(String studentCode) {
+        return studentBooks.getOrDefault(studentCode, new java.util.ArrayList<>());
+    }
+
+    /**
+     * Thêm sách mượn (dùng cho mock UI BorrowedBooksPage)
+     */
+    public void addBorrowedBook(String studentCode, models.BorrowedBook book) {
+        java.util.List<models.BorrowedBook> books = studentBooks.getOrDefault(studentCode, new java.util.ArrayList<>());
+        books.add(book);
+        studentBooks.put(studentCode, books);
+
+        CardInfo card = getCardByStudentCode(studentCode);
+        if (card != null) {
+            card.setBorrowedBooks(books.size());
+        }
+    }
+
+    /**
+     * Xóa sách mượn (dùng cho mock UI BorrowedBooksPage)
+     */
+    public void removeBorrowedBook(String studentCode, String bookId) {
+        java.util.List<models.BorrowedBook> books = studentBooks.getOrDefault(studentCode, new java.util.ArrayList<>());
+        models.BorrowedBook toRemove = null;
+        for (models.BorrowedBook b : books) {
+            if (b.getBookId().equalsIgnoreCase(bookId)) {
+                toRemove = b;
+                break;
+            }
+        }
+        if (toRemove != null) {
+            books.remove(toRemove);
+            studentBooks.put(studentCode, books);
+
+            CardInfo card = getCardByStudentCode(studentCode);
+            if (card != null) {
+                card.setBorrowedBooks(books.size());
+            }
+        }
+    }
+    
+    /**
+     * Mượn sách
+     */
+    public String borrowBook(String studentCode, String bookId) {
+        // Tìm sách trong danh sách có sẵn
+        String bookName = null;
+        for (String[] book : AVAILABLE_BOOKS) {
+            if (book[0].equalsIgnoreCase(bookId)) {
+                bookName = book[1];
+                break;
+            }
+        }
+        
+        if (bookName == null) {
+            return "Không tìm thấy sách với mã: " + bookId;
+        }
+        
+        // Kiểm tra đã mượn chưa
+        java.util.List<models.BorrowedBook> books = studentBooks.getOrDefault(studentCode, new java.util.ArrayList<>());
+        for (models.BorrowedBook b : books) {
+            if (b.getBookId().equalsIgnoreCase(bookId)) {
+                return "Bạn đã mượn sách này rồi!";
+            }
+        }
+        
+        // Kiểm tra giới hạn mượn
+        if (books.size() >= 5) {
+            return "Bạn đã mượn tối đa 5 cuốn sách!";
+        }
+        
+        // Tạo ngày mượn và hạn trả
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.time.LocalDate dueDate = today.plusDays(14);
+        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        
+        models.BorrowedBook newBook = new models.BorrowedBook(
+            bookId.toUpperCase(), 
+            bookName, 
+            today.format(fmt), 
+            dueDate.format(fmt), 
+            "Đang mượn", 
+            0
+        );
+        
+        books.add(newBook);
+        studentBooks.put(studentCode, books);
+        
+        // Cập nhật số sách trong CardInfo
+        CardInfo card = getCardByStudentCode(studentCode);
+        if (card != null) {
+            card.setBorrowedBooks(books.size());
+        }
+        
+        return null; // Success
+    }
+    
+    /**
+     * Trả sách
+     */
+    public String returnBook(String studentCode, String bookId) {
+        java.util.List<models.BorrowedBook> books = studentBooks.get(studentCode);
+        if (books == null || books.isEmpty()) {
+            return "Bạn không có sách nào để trả!";
+        }
+        
+        models.BorrowedBook toRemove = null;
+        int fine = 0;
+        for (models.BorrowedBook b : books) {
+            if (b.getBookId().equalsIgnoreCase(bookId)) {
+                toRemove = b;
+                fine = b.getOverdueDays() * 5000; // 5000 VND per day
+                break;
+            }
+        }
+        
+        if (toRemove == null) {
+            return "Không tìm thấy sách " + bookId + " trong danh sách mượn!";
+        }
+        
+        books.remove(toRemove);
+        
+        // Cập nhật số sách trong CardInfo
+        CardInfo card = getCardByStudentCode(studentCode);
+        if (card != null) {
+            card.setBorrowedBooks(books.size());
+            
+            // Trừ tiền phạt nếu trễ hạn
+            if (fine > 0) {
+                long newBalance = card.getBalance() - fine;
+                card.setBalance(Math.max(0, newBalance));
+                return "FINE:" + fine; // Báo có tiền phạt
+            }
+        }
+        
+        return null; // Success
+    }
+    
+    /**
+     * Lấy tên sách theo mã
+     */
+    public String getBookName(String bookId) {
+        for (String[] book : AVAILABLE_BOOKS) {
+            if (book[0].equalsIgnoreCase(bookId)) {
+                return book[1];
+            }
+        }
+        return null;
+    }
+
+    // --- QUẢN LÝ TÀI CHÍNH ---
+    
+    // Lưu lịch sử giao dịch theo studentCode
+    private java.util.Map<String, java.util.List<models.Transaction>> studentTransactions = new java.util.HashMap<>();
+    
+    /**
+     * Nạp tiền vào thẻ
+     */
+    public boolean deposit(String studentCode, long amount) {
+        CardInfo card = getCardByStudentCode(studentCode);
+        if (card == null) return false;
+        
+        card.setBalance(card.getBalance() + amount);
+        
+        // Thêm giao dịch
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        
+        java.util.List<models.Transaction> transactions = studentTransactions.getOrDefault(studentCode, new java.util.ArrayList<>());
+        transactions.add(0, new models.Transaction(today.format(fmt), "Nạp tiền", amount, "Thành công"));
+        studentTransactions.put(studentCode, transactions);
+        
+        return true;
+    }
+    
+    /**
+     * Thanh toán phạt
+     */
+    public boolean payFine(String studentCode, long amount) {
+        CardInfo card = getCardByStudentCode(studentCode);
+        if (card == null || card.getBalance() < amount) return false;
+        
+        card.setBalance(card.getBalance() - amount);
+        
+        // Thêm giao dịch
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        
+        java.util.List<models.Transaction> transactions = studentTransactions.getOrDefault(studentCode, new java.util.ArrayList<>());
+        transactions.add(0, new models.Transaction(today.format(fmt), "Thanh toán phạt", -amount, "Thành công"));
+        studentTransactions.put(studentCode, transactions);
+        
+        return true;
+    }
+    
+    /**
+     * Lấy lịch sử giao dịch
+     */
+    public java.util.List<models.Transaction> getTransactions(String studentCode) {
+        return studentTransactions.getOrDefault(studentCode, new java.util.ArrayList<>());
+    }
+    
+    /**
+     * Lấy số dư hiện tại
+     */
+    public long getBalance(String studentCode) {
+        CardInfo card = getCardByStudentCode(studentCode);
+        return card != null ? card.getBalance() : 0;
+    }
+
     public void connect() throws Exception {
         simulator = new Simulator();
         // Sử dụng AppletConstants.APPLET_AID thay vì DEFAULT_AID
