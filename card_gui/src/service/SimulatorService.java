@@ -1,16 +1,20 @@
 package service;
 
 import com.licel.jcardsim.base.Simulator;
-import applet.AppletConstants; // [FIXED] Import đúng file từ package applet
+import applet.AppletConstants;
+import models.CardInfo;
 import javacard.framework.AID;
 
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
+import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Service class for handling JavaCard simulator operations
@@ -224,6 +228,172 @@ public class SimulatorService {
             return true;
         }
 
+        return false;
+    }
+
+    // --- CÁC HÀM NGHIỆP VỤ CARD INFO ---
+
+    // In-memory storage for multiple cards (GUI display)
+    private List<CardInfo> cardList = new ArrayList<>();
+
+    /**
+     * Lưu thông tin thẻ vào JavaCard
+     * Applet format: [CARD_ID (10 bytes)][NAME_LENGTH][NAME][EXPIRY_DATE (8 bytes)]
+     */
+    public boolean setCardInfo(CardInfo cardInfo) throws Exception {
+        if (!isConnected) {
+            throw new RuntimeException("Chưa kết nối simulator!");
+        }
+        if (!isPinVerified) {
+            throw new RuntimeException("Vui lòng xác thực PIN trước!");
+        }
+
+        // Prepare card ID (pad to 10 bytes)
+        byte[] cardIdBytes = new byte[AppletConstants.CARD_ID_LENGTH];
+        byte[] studentIdBytes = cardInfo.getStudentId().getBytes(StandardCharsets.UTF_8);
+        int copyLen = Math.min(studentIdBytes.length, AppletConstants.CARD_ID_LENGTH);
+        System.arraycopy(studentIdBytes, 0, cardIdBytes, 0, copyLen);
+
+        // Prepare name
+        byte[] nameBytes = cardInfo.getHolderName().getBytes(StandardCharsets.UTF_8);
+        if (nameBytes.length > AppletConstants.NAME_MAX_LENGTH) {
+            nameBytes = Arrays.copyOf(nameBytes, AppletConstants.NAME_MAX_LENGTH);
+        }
+
+        // Prepare expiry date (use birthDate as expiry for now, pad to 8 bytes)
+        byte[] expiryBytes = new byte[AppletConstants.EXPIRY_DATE_LENGTH];
+        String dateStr = cardInfo.getBirthDate().replace("/", "");
+        byte[] dateBytes = dateStr.getBytes(StandardCharsets.UTF_8);
+        int dateCopyLen = Math.min(dateBytes.length, AppletConstants.EXPIRY_DATE_LENGTH);
+        System.arraycopy(dateBytes, 0, expiryBytes, 0, dateCopyLen);
+
+        // Build APDU: [CARD_ID (10)][NAME_LEN (1)][NAME][EXPIRY (8)]
+        int dataLength = AppletConstants.CARD_ID_LENGTH + 1 + nameBytes.length + AppletConstants.EXPIRY_DATE_LENGTH;
+        byte[] cmd = new byte[5 + dataLength];
+        cmd[0] = 0x00;
+        cmd[1] = AppletConstants.INS_SET_CARD_INFO;
+        cmd[2] = 0x00;
+        cmd[3] = 0x00;
+        cmd[4] = (byte)dataLength;
+
+        int offset = 5;
+        System.arraycopy(cardIdBytes, 0, cmd, offset, AppletConstants.CARD_ID_LENGTH);
+        offset += AppletConstants.CARD_ID_LENGTH;
+
+        cmd[offset++] = (byte)nameBytes.length;
+        System.arraycopy(nameBytes, 0, cmd, offset, nameBytes.length);
+        offset += nameBytes.length;
+
+        System.arraycopy(expiryBytes, 0, cmd, offset, AppletConstants.EXPIRY_DATE_LENGTH);
+
+        byte[] resp = sendCommand(cmd);
+
+        if (getSW(resp) == 0x9000) {
+            System.out.println("Card info saved successfully!");
+            return true;
+        } else {
+            System.err.println("Failed to save card info. SW: " + String.format("%04X", getSW(resp)));
+            return false;
+        }
+    }
+
+    /**
+     * Đọc thông tin thẻ từ JavaCard
+     * Response: [CARD_ID (10)][NAME_LEN][NAME][EXPIRY (8)][NUM_BOOKS]
+     */
+    public CardInfo getCardInfo() throws Exception {
+        if (!isConnected) {
+            throw new RuntimeException("Chưa kết nối simulator!");
+        }
+
+        byte[] cmd = {0x00, AppletConstants.INS_GET_CARD_INFO, 0x00, 0x00, 0x00};
+        byte[] resp = sendCommand(cmd);
+
+        if (getSW(resp) != 0x9000) {
+            throw new RuntimeException("Không thể đọc thông tin thẻ. SW: " + String.format("%04X", getSW(resp)));
+        }
+
+        CardInfo cardInfo = new CardInfo();
+        int offset = 0;
+
+        // Card ID (10 bytes)
+        if (resp.length > offset + AppletConstants.CARD_ID_LENGTH) {
+            String cardId = new String(resp, offset, AppletConstants.CARD_ID_LENGTH, StandardCharsets.UTF_8).trim();
+            cardInfo.setStudentId(cardId);
+            offset += AppletConstants.CARD_ID_LENGTH;
+        }
+
+        // Name (length + data)
+        if (offset < resp.length - 2) {
+            int nameLen = resp[offset++] & 0xFF;
+            if (nameLen > 0 && offset + nameLen <= resp.length - 2) {
+                cardInfo.setHolderName(new String(resp, offset, nameLen, StandardCharsets.UTF_8));
+                offset += nameLen;
+            }
+        }
+
+        // Expiry Date (8 bytes)
+        if (offset + AppletConstants.EXPIRY_DATE_LENGTH <= resp.length - 2) {
+            String expiry = new String(resp, offset, AppletConstants.EXPIRY_DATE_LENGTH, StandardCharsets.UTF_8).trim();
+            cardInfo.setBirthDate(expiry);
+            offset += AppletConstants.EXPIRY_DATE_LENGTH;
+        }
+
+        // Number of borrowed books
+        if (offset < resp.length - 2) {
+            int numBooks = resp[offset] & 0xFF;
+            cardInfo.setBorrowedBooks(numBooks);
+        }
+
+        return cardInfo;
+    }
+
+    /**
+     * Thêm thẻ vào danh sách quản lý (in-memory)
+     */
+    public void addCardToList(CardInfo cardInfo) {
+        for (int i = 0; i < cardList.size(); i++) {
+            if (cardList.get(i).getStudentId().equals(cardInfo.getStudentId())) {
+                cardList.set(i, cardInfo);
+                return;
+            }
+        }
+        cardList.add(cardInfo);
+    }
+
+    /**
+     * Lấy danh sách tất cả thẻ
+     */
+    public List<CardInfo> getAllCards() {
+        return new ArrayList<>(cardList);
+    }
+
+    /**
+     * Tìm thẻ theo MSSV hoặc tên
+     */
+    public List<CardInfo> searchCards(String keyword) {
+        List<CardInfo> results = new ArrayList<>();
+        String lowerKeyword = keyword.toLowerCase();
+        for (CardInfo card : cardList) {
+            if (card.getStudentId().toLowerCase().contains(lowerKeyword) ||
+                card.getHolderName().toLowerCase().contains(lowerKeyword)) {
+                results.add(card);
+            }
+        }
+        return results;
+    }
+
+    /**
+     * Cập nhật trạng thái thẻ (khóa/mở khóa)
+     */
+    public boolean toggleCardStatus(String studentId) {
+        for (CardInfo card : cardList) {
+            if (card.getStudentId().equals(studentId)) {
+                String newStatus = card.getStatus().equals("Hoạt động") ? "Khóa" : "Hoạt động";
+                card.setStatus(newStatus);
+                return true;
+            }
+        }
         return false;
     }
 }

@@ -322,7 +322,7 @@ public class LibraryCardMainFrame extends JFrame {
     private void showSettingsPage() {
         currentPage = "settings";
         mainContentPanel.removeAll();
-        SettingsPage settingsPage = new SettingsPage();
+        SettingsPage settingsPage = new SettingsPage(simulatorService);
         mainContentPanel.add(settingsPage);
         mainContentPanel.revalidate();
         mainContentPanel.repaint();
