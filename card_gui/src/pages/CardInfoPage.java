@@ -1,6 +1,8 @@
 package pages;
 
 import constants.AppConstants;
+import models.CardInfo;
+import service.SimulatorService;
 import ui.RoundedBorder;
 
 import javax.swing.*;
@@ -9,20 +11,19 @@ import java.awt.*;
 
 /**
  * Thông Tin Bạn Đọc Page - UI cải tiến
+ * [UPDATED] Hiển thị thông tin từ thẻ sinh viên
  */
 public class CardInfoPage extends JPanel {
     
-    private String studentId, studentName, birthDate, email, phone, major, address;
+    private SimulatorService simulatorService;
+    private CardInfo cardInfo;
     
-    public CardInfoPage(String studentId, String studentName, String birthDate, 
-                        String email, String phone, String major, String address) {
-        this.studentId = studentId;
-        this.studentName = studentName;
-        this.birthDate = birthDate;
-        this.email = email;
-        this.phone = phone;
-        this.major = major;
-        this.address = address;
+    public CardInfoPage(SimulatorService simulatorService) {
+        this.simulatorService = simulatorService;
+        
+        // Lấy thông tin thẻ của sinh viên hiện tại
+        String currentStudentCode = simulatorService.getCurrentStudentCode();
+        this.cardInfo = simulatorService.getCardByStudentCode(currentStudentCode);
         
         setLayout(new BorderLayout());
         setBackground(AppConstants.BACKGROUND);
@@ -92,7 +93,7 @@ public class CardInfoPage extends JPanel {
         titleRow.add(iconPanel);
         titleRow.add(title);
         
-        JLabel subtitle = new JLabel("Quản lý và cập nhật thông tin chi tiết của bạn đọc.");
+        JLabel subtitle = new JLabel("Thông tin chi tiết của bạn đọc.");
         subtitle.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         subtitle.setForeground(AppConstants.TEXT_SECONDARY);
         subtitle.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -131,6 +132,7 @@ public class CardInfoPage extends JPanel {
         panel.setBackground(Color.WHITE);
         
         // Avatar with green border
+        String holderName = cardInfo != null ? cardInfo.getHolderName() : "";
         JPanel avatarBox = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
@@ -145,12 +147,20 @@ public class CardInfoPage extends JPanel {
                 g2.setColor(new Color(243, 244, 246));
                 g2.fillRoundRect(0, 0, w, h, 12, 12);
                 
-                // Person silhouette
-                g2.setColor(new Color(156, 163, 175));
-                // Head
-                g2.fillOval(w/2 - 22, 35, 44, 44);
-                // Body
-                g2.fillRoundRect(w/2 - 35, 85, 70, 55, 25, 25);
+                // Vẽ chữ cái đầu tên
+                g2.setColor(AppConstants.PRIMARY_COLOR);
+                g2.setFont(new Font("Segoe UI", Font.BOLD, 60));
+                String initial = "";
+                if (holderName.contains(" ")) {
+                    String[] parts = holderName.split(" ");
+                    initial = parts[parts.length - 1].substring(0, 1).toUpperCase();
+                } else if (!holderName.isEmpty()) {
+                    initial = holderName.substring(0, 1).toUpperCase();
+                }
+                FontMetrics fm = g2.getFontMetrics();
+                int x = (w - fm.stringWidth(initial)) / 2;
+                int y = ((h - fm.getHeight()) / 2) + fm.getAscent();
+                g2.drawString(initial, x, y);
                 
                 g2.dispose();
             }
@@ -161,36 +171,32 @@ public class CardInfoPage extends JPanel {
         avatarBox.setAlignmentX(Component.CENTER_ALIGNMENT);
         
         // ID
-        JLabel idLabel = new JLabel("ID Thẻ: 123456789");
+        String studentId = cardInfo != null ? cardInfo.getStudentId() : "N/A";
+        JLabel idLabel = new JLabel("MSSV: " + studentId);
         idLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
         idLabel.setForeground(AppConstants.TEXT_PRIMARY);
         idLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         idLabel.setBorder(new EmptyBorder(15, 0, 5, 0));
         
-        // Expiry
-        JLabel expiryLabel = new JLabel("Ngày Hết Hạn: 31/12/2024");
-        expiryLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-        expiryLabel.setForeground(AppConstants.SUCCESS_COLOR);
-        expiryLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        // Status
+        String status = cardInfo != null ? cardInfo.getStatus() : "N/A";
+        JLabel statusLabel = new JLabel("Trạng thái: " + status);
+        statusLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        statusLabel.setForeground("Hoạt động".equals(status) ? AppConstants.SUCCESS_COLOR : AppConstants.DANGER_COLOR);
+        statusLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         
-        // Update photo button
-        JButton updateBtn = new JButton("Cập Nhật Ảnh");
-        updateBtn.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        updateBtn.setForeground(AppConstants.TEXT_PRIMARY);
-        updateBtn.setBackground(Color.WHITE);
-        updateBtn.setBorder(BorderFactory.createCompoundBorder(
-            new RoundedBorder(AppConstants.BORDER_COLOR, 1, 8),
-            new EmptyBorder(10, 24, 10, 24)
-        ));
-        updateBtn.setFocusPainted(false);
-        updateBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        updateBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
+        // Balance
+        long balance = cardInfo != null ? cardInfo.getBalance() : 0;
+        JLabel balanceLabel = new JLabel("Số dư: " + String.format("%,d VND", balance));
+        balanceLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        balanceLabel.setForeground(AppConstants.TEXT_SECONDARY);
+        balanceLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        balanceLabel.setBorder(new EmptyBorder(5, 0, 0, 0));
         
         panel.add(avatarBox);
         panel.add(idLabel);
-        panel.add(expiryLabel);
-        panel.add(Box.createVerticalStrut(18));
-        panel.add(updateBtn);
+        panel.add(statusLabel);
+        panel.add(balanceLabel);
         
         return panel;
     }
@@ -200,13 +206,21 @@ public class CardInfoPage extends JPanel {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBackground(Color.WHITE);
         
+        String studentId = cardInfo != null ? cardInfo.getStudentId() : "N/A";
+        String holderName = cardInfo != null ? cardInfo.getHolderName() : "N/A";
+        String birthDate = cardInfo != null && !cardInfo.getBirthDate().isEmpty() ? cardInfo.getBirthDate() : "N/A";
+        String email = cardInfo != null && !cardInfo.getEmail().isEmpty() ? cardInfo.getEmail() : "N/A";
+        String department = cardInfo != null && !cardInfo.getDepartment().isEmpty() ? cardInfo.getDepartment() : "N/A";
+        String address = cardInfo != null && !cardInfo.getAddress().isEmpty() ? cardInfo.getAddress() : "N/A";
+        int borrowedBooks = cardInfo != null ? cardInfo.getBorrowedBooks() : 0;
+        
         // Row 1
         JPanel row1 = new JPanel(new GridLayout(1, 2, 40, 0));
         row1.setBackground(Color.WHITE);
         row1.setMaximumSize(new Dimension(550, 65));
         row1.setAlignmentX(Component.LEFT_ALIGNMENT);
         row1.add(createInfoField("Mã Sinh Viên:", studentId));
-        row1.add(createInfoField("Họ Tên:", studentName));
+        row1.add(createInfoField("Họ Tên:", holderName));
         
         // Row 2
         JPanel row2 = new JPanel(new GridLayout(1, 2, 40, 0));
@@ -221,8 +235,8 @@ public class CardInfoPage extends JPanel {
         row3.setBackground(Color.WHITE);
         row3.setMaximumSize(new Dimension(550, 65));
         row3.setAlignmentX(Component.LEFT_ALIGNMENT);
-        row3.add(createInfoField("Khoa/Lớp:", major));
-        row3.add(createInfoField("Số Điện Thoại:", phone));
+        row3.add(createInfoField("Khoa/Viện:", department));
+        row3.add(createInfoField("Sách đang mượn:", String.valueOf(borrowedBooks) + " cuốn"));
         
         // Row 4 - Address full width
         JPanel row4 = createInfoField("Địa Chỉ:", address);
@@ -270,65 +284,12 @@ public class CardInfoPage extends JPanel {
             new EmptyBorder(20, 0, 0, 0)
         ));
         
-        JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 0));
-        buttonsPanel.setBackground(Color.WHITE);
+        // Info text
+        JLabel infoText = new JLabel("Để cập nhật thông tin, vui lòng liên hệ Admin.");
+        infoText.setFont(new Font("Segoe UI", Font.ITALIC, 12));
+        infoText.setForeground(AppConstants.TEXT_SECONDARY);
         
-        // Cancel button
-        JButton cancelBtn = new JButton("X  Hủy") {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(getBackground());
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
-                g2.setColor(AppConstants.BORDER_COLOR);
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 10, 10);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        cancelBtn.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        cancelBtn.setForeground(AppConstants.TEXT_PRIMARY);
-        cancelBtn.setBackground(Color.WHITE);
-        cancelBtn.setPreferredSize(new Dimension(110, 44));
-        cancelBtn.setBorder(new EmptyBorder(8, 20, 8, 20));
-        cancelBtn.setFocusPainted(false);
-        cancelBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        cancelBtn.setContentAreaFilled(false);
-        cancelBtn.setOpaque(false);
-        
-        // Save button
-        JButton saveBtn = new JButton("Lưu Thay Đổi") {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(getBackground());
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
-                g2.dispose();
-                super.paintComponent(g);
-            }
-        };
-        saveBtn.setFont(new Font("Segoe UI", Font.BOLD, 14));
-        saveBtn.setForeground(Color.WHITE);
-        saveBtn.setBackground(AppConstants.PRIMARY_COLOR);
-        saveBtn.setPreferredSize(new Dimension(140, 44));
-        saveBtn.setBorder(new EmptyBorder(8, 20, 8, 20));
-        saveBtn.setFocusPainted(false);
-        saveBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        saveBtn.setContentAreaFilled(false);
-        saveBtn.setOpaque(false);
-        
-        Color orig = AppConstants.PRIMARY_COLOR;
-        saveBtn.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseEntered(java.awt.event.MouseEvent e) { saveBtn.setBackground(orig.darker()); }
-            public void mouseExited(java.awt.event.MouseEvent e) { saveBtn.setBackground(orig); }
-        });
-        
-        buttonsPanel.add(cancelBtn);
-        buttonsPanel.add(saveBtn);
-        
-        panel.add(buttonsPanel, BorderLayout.EAST);
+        panel.add(infoText, BorderLayout.WEST);
         
         return panel;
     }

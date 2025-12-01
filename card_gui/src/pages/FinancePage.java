@@ -1,7 +1,9 @@
 package pages;
 
 import constants.AppConstants;
+import models.CardInfo;
 import models.Transaction;
+import service.SimulatorService;
 import ui.RoundedBorder;
 
 import javax.swing.*;
@@ -9,21 +11,31 @@ import javax.swing.border.*;
 import javax.swing.table.*;
 import java.awt.*;
 import java.text.NumberFormat;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 /**
  * Tài Chính Page - UI cải tiến
+ * [UPDATED] Tích hợp SimulatorService
  */
 public class FinancePage extends JPanel {
     
+    private SimulatorService simulatorService;
+    private String studentCode;
     private long balance;
     private List<Transaction> transactions;
+    private JLabel balanceValue;
+    private DefaultTableModel historyModel;
     private static final Color GOLD_COLOR = new Color(234, 179, 8);
     
-    public FinancePage(long balance, List<Transaction> transactions) {
-        this.balance = balance;
-        this.transactions = transactions;
+    public FinancePage(SimulatorService simulatorService) {
+        this.simulatorService = simulatorService;
+        this.studentCode = simulatorService.getCurrentStudentCode();
+        
+        // Lấy số dư và lịch sử giao dịch thực tế từ SimulatorService
+        this.balance = simulatorService.getBalance(studentCode);
+        this.transactions = new ArrayList<>(simulatorService.getTransactions(studentCode));
         
         setLayout(new BorderLayout());
         setBackground(AppConstants.BACKGROUND);
@@ -127,7 +139,7 @@ public class FinancePage extends JPanel {
         balanceLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         
         NumberFormat fmt = NumberFormat.getInstance(new Locale("vi", "VN"));
-        JLabel balanceValue = new JLabel(fmt.format(balance) + " VND");
+        balanceValue = new JLabel(fmt.format(balance) + " VND");
         balanceValue.setFont(new Font("Segoe UI", Font.BOLD, 32));
         balanceValue.setForeground(AppConstants.SUCCESS_COLOR);
         balanceValue.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -164,6 +176,7 @@ public class FinancePage extends JPanel {
         
         JTextField amountField = createTextField("Nhập số tiền bạn muốn nạp");
         JButton topupBtn = createButton("Nạp Tiền", AppConstants.PRIMARY_COLOR, Color.WHITE, 110, 42);
+        topupBtn.addActionListener(e -> handleTopupFromField(amountField));
         
         inputRow.add(amountField, BorderLayout.CENTER);
         inputRow.add(topupBtn, BorderLayout.EAST);
@@ -193,6 +206,16 @@ public class FinancePage extends JPanel {
                 }
                 public void mouseExited(java.awt.event.MouseEvent e) {
                     btn.setBackground(Color.WHITE);
+                }
+            });
+            
+            // Nạp nhanh với số tiền cố định
+            btn.addActionListener(e -> {
+                amountField.setText(amt);
+                String digits = amt.replaceAll("[^0-9]", "");
+                if (!digits.isEmpty()) {
+                    long value = Long.parseLong(digits) * 1000L; // vì chuỗi là 50,000 etc.
+                    handleTopup(value);
                 }
             });
             
@@ -320,16 +343,16 @@ public class FinancePage extends JPanel {
         
         // Table
         String[] cols = {"Ngày", "Loại Giao Dịch", "Số Tiền", "Trạng Thái"};
-        DefaultTableModel model = new DefaultTableModel(cols, 0);
+        historyModel = new DefaultTableModel(cols, 0);
         
         NumberFormat fmt = NumberFormat.getInstance(new Locale("vi", "VN"));
         for (Transaction t : transactions) {
-            String amtStr = (t.getAmount() >= 0 ? "+ " : "- ") + 
+            String amtStr = (t.getAmount() >= 0 ? "+ " : "- ") +
                 fmt.format(Math.abs(t.getAmount())) + " VND";
-            model.addRow(new Object[]{t.getDate(), t.getType(), amtStr, t.getStatus()});
+            historyModel.addRow(new Object[]{t.getDate(), t.getType(), amtStr, t.getStatus()});
         }
         
-        JTable table = new JTable(model);
+        JTable table = new JTable(historyModel);
         table.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         table.setRowHeight(50);
         table.setShowGrid(false);
@@ -435,10 +458,54 @@ public class FinancePage extends JPanel {
         
         Color orig = bgColor;
         btn.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseEntered(java.awt.event.MouseEvent e) { btn.setBackground(orig.darker()); }
-            public void mouseExited(java.awt.event.MouseEvent e) { btn.setBackground(orig); }
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                if (btn.isEnabled()) btn.setBackground(orig.darker());
+            }
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                if (btn.isEnabled()) btn.setBackground(orig);
+            }
         });
         
         return btn;
+    }
+
+    private void handleTopupFromField(JTextField amountField) {
+        String raw = amountField.getText().trim();
+        String digits = raw.replaceAll("[^0-9]", "");
+        if (digits.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Vui lòng nhập số tiền hợp lệ!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        long value = Long.parseLong(digits);
+        handleTopup(value);
+    }
+
+    private void handleTopup(long amount) {
+        if (amount <= 0) {
+            JOptionPane.showMessageDialog(this, "Số tiền nạp phải lớn hơn 0!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        boolean ok = simulatorService.deposit(studentCode, amount);
+        if (!ok) {
+            JOptionPane.showMessageDialog(this, "Không thể nạp tiền. Vui lòng thử lại!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        // Cập nhật balance và lịch sử giao dịch
+        this.balance = simulatorService.getBalance(studentCode);
+        NumberFormat fmt = NumberFormat.getInstance(new Locale("vi", "VN"));
+        balanceValue.setText(fmt.format(balance) + " VND");
+
+        this.transactions = new ArrayList<>(simulatorService.getTransactions(studentCode));
+        historyModel.setRowCount(0);
+        for (Transaction t : transactions) {
+            String amtStr = (t.getAmount() >= 0 ? "+ " : "- ") +
+                fmt.format(Math.abs(t.getAmount())) + " VND";
+            historyModel.addRow(new Object[]{t.getDate(), t.getType(), amtStr, t.getStatus()});
+        }
+
+        JOptionPane.showMessageDialog(this,
+                "Nạp tiền thành công: " + fmt.format(amount) + " VND",
+                "Thành công",
+                JOptionPane.INFORMATION_MESSAGE);
     }
 }

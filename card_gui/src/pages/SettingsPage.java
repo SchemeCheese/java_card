@@ -1,20 +1,46 @@
 package pages;
 
 import constants.AppConstants;
+import models.CardInfo;
+import service.SimulatorService;
 import ui.RoundedBorder;
 
 import javax.swing.*;
 import javax.swing.border.*;
 import javax.swing.table.*;
 import java.awt.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Settings Page - Quản trị hệ thống - UI cải tiến
+ * Settings Page - Quản trị hệ thống
+ * [UPDATED] Tích hợp lưu/đọc dữ liệu thực từ JavaCard
  */
 public class SettingsPage extends JPanel {
     
-    public SettingsPage() {
+    private SimulatorService simulatorService;
+    
+    // Form fields
+    private JTextField txtStudentId;
+    private JTextField txtName;
+    private JTextField txtEmail;
+    private JTextField txtDepartment;
+    private JTextField txtBirthDate;
+    private JTextField txtAddress;
+    private JTextField txtSearch;
+    
+    // Card list panel
+    private JPanel cardListPanel;
+    
+    // Activity log
+    private DefaultTableModel logTableModel;
+    private List<String[]> activityLog = new ArrayList<>();
+    
+    public SettingsPage(SimulatorService simulatorService) {
+        this.simulatorService = simulatorService;
+        
         setLayout(new BorderLayout());
         setBackground(AppConstants.BACKGROUND);
         setBorder(new EmptyBorder(30, 40, 30, 40));
@@ -39,6 +65,14 @@ public class SettingsPage extends JPanel {
         scroll.getVerticalScrollBar().setUnitIncrement(16);
         
         add(scroll, BorderLayout.CENTER);
+        
+        // Load existing cards
+        refreshCardList();
+    }
+    
+    // Constructor mặc định cho tương thích ngược
+    public SettingsPage() {
+        this(null);
     }
     
     private JPanel createHeader() {
@@ -55,7 +89,6 @@ public class SettingsPage extends JPanel {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(AppConstants.TEXT_SECONDARY);
-                // Draw gear shape
                 g2.setStroke(new BasicStroke(2f));
                 g2.drawOval(8, 8, 16, 16);
                 g2.fillRect(14, 4, 4, 6);
@@ -100,13 +133,13 @@ public class SettingsPage extends JPanel {
         panel.setBackground(AppConstants.BACKGROUND);
         panel.setAlignmentX(Component.LEFT_ALIGNMENT);
         
-        // Create new card - fixed width, taller height
+        // Create new card - fixed width
         JPanel leftCard = createNewCardSection();
         leftCard.setPreferredSize(new Dimension(420, 580));
         leftCard.setMinimumSize(new Dimension(400, 560));
         leftCard.setMaximumSize(new Dimension(450, 600));
         
-        // Card Management - flexible width, same height
+        // Card Management - flexible width
         JPanel rightCard = createCardManagementSection();
         rightCard.setPreferredSize(new Dimension(500, 580));
         rightCard.setMinimumSize(new Dimension(450, 560));
@@ -139,46 +172,149 @@ public class SettingsPage extends JPanel {
         desc.setAlignmentX(Component.LEFT_ALIGNMENT);
         desc.setBorder(new EmptyBorder(4, 0, 12, 0));
         
-        // Form fields - compact layout
-        String[][] fields = {
-            {"Mã Số Sinh Viên", "Nhập MSSV"},
-            {"Họ và Tên", "Nhập họ tên sinh viên"},
-            {"Email", "email@example.com"},
-            {"Khoa / Viện", "Nhập khoa / viện"},
-            {"Ngày Sinh", "DD/MM/YYYY"},
-            {"Địa Chỉ", "Nhập địa chỉ"}
-        };
-        
         panel.add(title);
         panel.add(desc);
         
-        for (String[] f : fields) {
-            JLabel lbl = new JLabel(f[0]);
-            lbl.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-            lbl.setForeground(AppConstants.TEXT_SECONDARY);
-            lbl.setAlignmentX(Component.LEFT_ALIGNMENT);
-            lbl.setBorder(new EmptyBorder(4, 0, 3, 0));
-            
-            JTextField txt = createTextField(f[1]);
-            txt.setPreferredSize(new Dimension(Integer.MAX_VALUE, 36));
-            txt.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
-            txt.setAlignmentX(Component.LEFT_ALIGNMENT);
-            
-            panel.add(lbl);
-            panel.add(txt);
-        }
+        // Student ID
+        panel.add(createFieldLabel("Mã Số Sinh Viên"));
+        txtStudentId = createTextField("Nhập MSSV");
+        panel.add(txtStudentId);
+        
+        // Name
+        panel.add(createFieldLabel("Họ và Tên"));
+        txtName = createTextField("Nhập họ tên sinh viên");
+        panel.add(txtName);
+        
+        // Email
+        panel.add(createFieldLabel("Email"));
+        txtEmail = createTextField("email@example.com");
+        panel.add(txtEmail);
+        
+        // Department
+        panel.add(createFieldLabel("Khoa / Viện"));
+        txtDepartment = createTextField("Nhập khoa / viện");
+        panel.add(txtDepartment);
+        
+        // Birth Date
+        panel.add(createFieldLabel("Ngày Sinh"));
+        txtBirthDate = createTextField("DD/MM/YYYY");
+        panel.add(txtBirthDate);
+        
+        // Address
+        panel.add(createFieldLabel("Địa Chỉ"));
+        txtAddress = createTextField("Nhập địa chỉ");
+        panel.add(txtAddress);
         
         panel.add(Box.createVerticalStrut(12));
         
-        // Submit btn
+        // Submit button
         JButton submitBtn = createButton("Tạo Thẻ Mới", AppConstants.SUCCESS_COLOR, Color.WHITE, Integer.MAX_VALUE, 40);
         submitBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
         submitBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+        submitBtn.addActionListener(e -> handleCreateCard());
         
         panel.add(submitBtn);
         panel.add(Box.createVerticalGlue());
         
         return panel;
+    }
+    
+    private JLabel createFieldLabel(String text) {
+        JLabel lbl = new JLabel(text);
+        lbl.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        lbl.setForeground(AppConstants.TEXT_SECONDARY);
+        lbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        lbl.setBorder(new EmptyBorder(4, 0, 3, 0));
+        return lbl;
+    }
+    
+    private void handleCreateCard() {
+        // Validate fields
+        String studentId = getFieldValue(txtStudentId, "Nhập MSSV");
+        String name = getFieldValue(txtName, "Nhập họ tên sinh viên");
+        String email = getFieldValue(txtEmail, "email@example.com");
+        String department = getFieldValue(txtDepartment, "Nhập khoa / viện");
+        String birthDate = getFieldValue(txtBirthDate, "DD/MM/YYYY");
+        String address = getFieldValue(txtAddress, "Nhập địa chỉ");
+        
+        if (studentId.isEmpty() || name.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                "Vui lòng nhập MSSV và Họ tên!",
+                "Thiếu thông tin", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        try {
+            // Create CardInfo object
+            CardInfo cardInfo = new CardInfo(studentId, name, email, department, birthDate, address);
+            
+            // Save to JavaCard (if connected and PIN verified)
+            if (simulatorService != null && simulatorService.isConnected() && simulatorService.isPinVerified()) {
+                boolean saved = simulatorService.setCardInfo(cardInfo);
+                if (saved) {
+                    // Also add to in-memory list for display
+                    simulatorService.addCardToList(cardInfo);
+                    addActivityLog("Tạo thẻ mới", studentId, "Thành công");
+                    
+                    JOptionPane.showMessageDialog(this,
+                        "Đã lưu thông tin thẻ thành công!\n" +
+                        "MSSV: " + studentId + "\n" +
+                        "Họ tên: " + name,
+                        "Thành công", JOptionPane.INFORMATION_MESSAGE);
+                    
+                    clearForm();
+                    refreshCardList();
+                } else {
+                    addActivityLog("Tạo thẻ mới", studentId, "Thất bại");
+                    JOptionPane.showMessageDialog(this,
+                        "Không thể lưu thông tin thẻ!",
+                        "Lỗi", JOptionPane.ERROR_MESSAGE);
+                }
+            } else {
+                // Save to in-memory only (demo mode)
+                if (simulatorService != null) {
+                    simulatorService.addCardToList(cardInfo);
+                }
+                addActivityLog("Tạo thẻ mới", studentId, "Thành công");
+                
+                JOptionPane.showMessageDialog(this,
+                    "Đã tạo thẻ mới (chế độ demo)!\n" +
+                    "Lưu ý: Để lưu vào thẻ thật, vui lòng xác thực PIN trước.",
+                    "Thành công", JOptionPane.INFORMATION_MESSAGE);
+                
+                clearForm();
+                refreshCardList();
+            }
+        } catch (Exception ex) {
+            addActivityLog("Tạo thẻ mới", studentId, "Thất bại");
+            JOptionPane.showMessageDialog(this,
+                "Lỗi khi tạo thẻ: " + ex.getMessage(),
+                "Lỗi", JOptionPane.ERROR_MESSAGE);
+            ex.printStackTrace();
+        }
+    }
+    
+    private String getFieldValue(JTextField field, String placeholder) {
+        String value = field.getText().trim();
+        if (value.equals(placeholder)) {
+            return "";
+        }
+        return value;
+    }
+    
+    private void clearForm() {
+        txtStudentId.setText("Nhập MSSV");
+        txtStudentId.setForeground(Color.GRAY);
+        txtName.setText("Nhập họ tên sinh viên");
+        txtName.setForeground(Color.GRAY);
+        txtEmail.setText("email@example.com");
+        txtEmail.setForeground(Color.GRAY);
+        txtDepartment.setText("Nhập khoa / viện");
+        txtDepartment.setForeground(Color.GRAY);
+        txtBirthDate.setText("DD/MM/YYYY");
+        txtBirthDate.setForeground(Color.GRAY);
+        txtAddress.setText("Nhập địa chỉ");
+        txtAddress.setForeground(Color.GRAY);
     }
     
     private JPanel createCardManagementSection() {
@@ -200,36 +336,83 @@ public class SettingsPage extends JPanel {
         title.setFont(new Font("Segoe UI", Font.BOLD, 18));
         title.setForeground(AppConstants.TEXT_PRIMARY);
         
-        JTextField searchField = createTextField("Tìm theo MSSV hoặc Tên...");
-        searchField.setPreferredSize(new Dimension(220, 36));
+        txtSearch = createTextField("Tìm theo MSSV hoặc Tên...");
+        txtSearch.setPreferredSize(new Dimension(220, 36));
+        txtSearch.addKeyListener(new java.awt.event.KeyAdapter() {
+            public void keyReleased(java.awt.event.KeyEvent e) {
+                handleSearch();
+            }
+        });
         
         header.add(title, BorderLayout.WEST);
-        header.add(searchField, BorderLayout.EAST);
+        header.add(txtSearch, BorderLayout.EAST);
         
         panel.add(header);
         panel.add(Box.createVerticalStrut(12));
         
-        // Card list
-        String[][] cards = {
-            {"22520001", "Nguyen Van A", "CNTT", "Hoạt động"},
-            {"22520002", "Tran Thi B", "Dien Tu", "Hoạt động"},
-            {"22520003", "Le Van C", "Co Khi", "Khóa"},
-            {"22520004", "Pham Thi D", "Kinh Te", "Hoạt động"},
-            {"22520005", "Hoang Van E", "Xay Dung", "Khóa"}
-        };
+        // Card list panel (scrollable)
+        cardListPanel = new JPanel();
+        cardListPanel.setLayout(new BoxLayout(cardListPanel, BoxLayout.Y_AXIS));
+        cardListPanel.setBackground(Color.WHITE);
         
-        for (String[] card : cards) {
-            panel.add(createCardItem(card[0], card[1], card[2], card[3]));
-            panel.add(Box.createVerticalStrut(8));
-        }
+        JScrollPane cardScroll = new JScrollPane(cardListPanel);
+        cardScroll.setBorder(null);
+        cardScroll.setAlignmentX(Component.LEFT_ALIGNMENT);
+        cardScroll.getVerticalScrollBar().setUnitIncrement(16);
         
+        panel.add(cardScroll);
         panel.add(Box.createVerticalGlue());
         
         return panel;
     }
     
-    private JPanel createCardItem(String mssv, String name, String dept, String status) {
-        // Dùng GridBagLayout để kiểm soát tốt hơn
+    private void handleSearch() {
+        String keyword = getFieldValue(txtSearch, "Tìm theo MSSV hoặc Tên...");
+        refreshCardList(keyword);
+    }
+    
+    private void refreshCardList() {
+        refreshCardList("");
+    }
+    
+    private void refreshCardList(String keyword) {
+        cardListPanel.removeAll();
+        
+        List<CardInfo> cards;
+        if (simulatorService != null) {
+            if (keyword.isEmpty()) {
+                cards = simulatorService.getAllCards();
+            } else {
+                cards = simulatorService.searchCards(keyword);
+            }
+        } else {
+            cards = new ArrayList<>();
+        }
+        
+        if (cards.isEmpty()) {
+            JLabel emptyLabel = new JLabel("Chưa có thẻ nào được tạo");
+            emptyLabel.setFont(new Font("Segoe UI", Font.ITALIC, 14));
+            emptyLabel.setForeground(AppConstants.TEXT_SECONDARY);
+            emptyLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+            cardListPanel.add(Box.createVerticalStrut(50));
+            cardListPanel.add(emptyLabel);
+        } else {
+            for (CardInfo card : cards) {
+                cardListPanel.add(createCardItem(card));
+                cardListPanel.add(Box.createVerticalStrut(8));
+            }
+        }
+        
+        cardListPanel.revalidate();
+        cardListPanel.repaint();
+    }
+    
+    private JPanel createCardItem(CardInfo card) {
+        String mssv = card.getStudentId();
+        String name = card.getHolderName();
+        String dept = card.getDepartment();
+        String status = card.getStatus();
+        
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setBackground(new Color(249, 250, 251));
         panel.setBorder(BorderFactory.createCompoundBorder(
@@ -243,22 +426,20 @@ public class SettingsPage extends JPanel {
         
         GridBagConstraints gbc = new GridBagConstraints();
         
-        // Avatar - vẽ trong JLabel để đảm bảo kích thước
+        // Avatar
         JLabel avatar = new JLabel() {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                // Vẽ nền tròn
                 g2.setColor(AppConstants.PRIMARY_COLOR);
                 g2.fillOval(0, 0, 40, 40);
-                // Vẽ chữ cái đầu
                 g2.setColor(Color.WHITE);
                 g2.setFont(new Font("Segoe UI", Font.BOLD, 16));
                 String initial = "";
                 if (name.contains(" ")) {
                     initial = name.substring(name.lastIndexOf(" ") + 1, name.lastIndexOf(" ") + 2).toUpperCase();
-                } else if (name.length() > 0) {
+                } else if (!name.isEmpty()) {
                     initial = name.substring(0, 1).toUpperCase();
                 }
                 FontMetrics fm = g2.getFontMetrics();
@@ -293,7 +474,7 @@ public class SettingsPage extends JPanel {
         panel.add(nameLabel, gbc);
         
         // Detail label
-        JLabel detailLabel = new JLabel("MSSV: " + mssv + " | " + dept);
+        JLabel detailLabel = new JLabel("MSSV: " + mssv + " | " + (dept.isEmpty() ? "N/A" : dept));
         detailLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         detailLabel.setForeground(AppConstants.TEXT_SECONDARY);
         
@@ -329,6 +510,7 @@ public class SettingsPage extends JPanel {
         String btnText = status.equals("Hoạt động") ? "Khóa Thẻ" : "Mở Khóa";
         Color btnBg = status.equals("Hoạt động") ? AppConstants.DANGER_COLOR : AppConstants.SUCCESS_COLOR;
         JButton toggleBtn = createButton(btnText, btnBg, Color.WHITE, 90, 30);
+        toggleBtn.addActionListener(e -> handleToggleStatus(card));
         
         gbc.gridx = 3;
         gbc.gridy = 0;
@@ -336,7 +518,63 @@ public class SettingsPage extends JPanel {
         gbc.insets = new Insets(0, 0, 0, 0);
         panel.add(toggleBtn, gbc);
         
+        // View details on click
+        panel.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        panel.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    showCardDetails(card);
+                }
+            }
+        });
+        
         return panel;
+    }
+    
+    private void handleToggleStatus(CardInfo card) {
+        String action = card.getStatus().equals("Hoạt động") ? "Khóa thẻ" : "Mở khóa thẻ";
+        
+        if (simulatorService != null) {
+            simulatorService.toggleCardStatus(card.getStudentId());
+            addActivityLog(action, card.getStudentId(), "Thành công");
+            refreshCardList();
+        }
+    }
+    
+    private void showCardDetails(CardInfo card) {
+        String message = String.format(
+            "MSSV: %s\n" +
+            "Họ tên: %s\n" +
+            "Email: %s\n" +
+            "Khoa/Viện: %s\n" +
+            "Ngày sinh: %s\n" +
+            "Địa chỉ: %s\n" +
+            "Trạng thái: %s\n" +
+            "Số sách đang mượn: %d",
+            card.getStudentId(),
+            card.getHolderName(),
+            card.getEmail().isEmpty() ? "N/A" : card.getEmail(),
+            card.getDepartment().isEmpty() ? "N/A" : card.getDepartment(),
+            card.getBirthDate().isEmpty() ? "N/A" : card.getBirthDate(),
+            card.getAddress().isEmpty() ? "N/A" : card.getAddress(),
+            card.getStatus(),
+            card.getBorrowedBooks()
+        );
+        
+        JOptionPane.showMessageDialog(this, message, "Chi tiết thẻ", JOptionPane.INFORMATION_MESSAGE);
+    }
+    
+    private void addActivityLog(String action, String mssv, String status) {
+        String time = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss - dd/MM/yyyy"));
+        activityLog.add(0, new String[]{time, action, mssv, status});
+        
+        if (logTableModel != null) {
+            logTableModel.insertRow(0, new Object[]{time, action, mssv, status});
+            // Keep only last 50 entries
+            while (logTableModel.getRowCount() > 50) {
+                logTableModel.removeRow(logTableModel.getRowCount() - 1);
+            }
+        }
     }
     
     private JPanel createActivityLogSection() {
@@ -369,24 +607,33 @@ public class SettingsPage extends JPanel {
         ));
         refreshBtn.setFocusPainted(false);
         refreshBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        refreshBtn.addActionListener(e -> {
+            refreshCardList();
+            // Try to read card info from JavaCard
+            if (simulatorService != null && simulatorService.isConnected()) {
+                try {
+                    CardInfo cardInfo = simulatorService.getCardInfo();
+                    if (cardInfo.isInitialized()) {
+                        addActivityLog("Đọc thẻ", cardInfo.getStudentId(), "Thành công");
+                        JOptionPane.showMessageDialog(this,
+                            "Đã đọc thông tin thẻ từ JavaCard:\n" + cardInfo.toString(),
+                            "Thông tin thẻ", JOptionPane.INFORMATION_MESSAGE);
+                    }
+                } catch (Exception ex) {
+                    // Card might not have info yet
+                    System.out.println("No card info available: " + ex.getMessage());
+                }
+            }
+        });
         
         header.add(title, BorderLayout.WEST);
         header.add(refreshBtn, BorderLayout.EAST);
         
         // Table
         String[] cols = {"Thời Gian", "Hành Động", "MSSV", "Trạng Thái"};
-        Object[][] data = {
-            {"15:30:25 - 01/01/2025", "Tạo thẻ mới", "22520006", "Thành công"},
-            {"14:22:10 - 01/01/2025", "Khóa thẻ", "22520003", "Thành công"},
-            {"13:15:45 - 01/01/2025", "Đổi mã PIN", "22520001", "Thành công"},
-            {"12:05:30 - 01/01/2025", "Nạp tiền (500,000 VND)", "22520002", "Thành công"},
-            {"11:30:00 - 01/01/2025", "Mở khóa thẻ", "22520005", "Thất bại"}
-        };
+        logTableModel = new DefaultTableModel(cols, 0);
         
-        DefaultTableModel model = new DefaultTableModel(cols, 0);
-        for (Object[] row : data) model.addRow(row);
-        
-        JTable table = new JTable(model);
+        JTable table = new JTable(logTableModel);
         table.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         table.setRowHeight(45);
         table.setShowGrid(false);
@@ -435,6 +682,9 @@ public class SettingsPage extends JPanel {
             new RoundedBorder(AppConstants.BORDER_COLOR, 1, 6),
             new EmptyBorder(6, 10, 6, 10)
         ));
+        field.setPreferredSize(new Dimension(Integer.MAX_VALUE, 36));
+        field.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
+        field.setAlignmentX(Component.LEFT_ALIGNMENT);
         
         field.addFocusListener(new java.awt.event.FocusAdapter() {
             public void focusGained(java.awt.event.FocusEvent e) {

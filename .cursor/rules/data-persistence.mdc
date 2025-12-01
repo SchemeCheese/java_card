@@ -1,0 +1,56 @@
+---
+description: Guidelines for data persistence in the JavaCard simulator - understanding where and how data is stored
+---
+# Data Persistence Architecture
+
+## Important: JCardSim Does NOT Persist Data
+
+**JCardSim is an in-memory simulator.** When the application closes, all card data is lost. This is a fundamental limitation of the simulator.
+
+## Current Data Storage Locations
+
+### 1. JavaCard Applet (In-Memory, Lost on Restart)
+The [CardInfoManager.java](mdc:card_gui/src/applet/CardInfoManager.java) stores:
+- `cardId` (10 bytes) - Student ID
+- `holderName` (up to 50 bytes) - Name
+- `expiryDate` (8 bytes) - Date in DDMMYYYY format
+
+### 2. SimulatorService List (In-Memory, Lost on Restart)
+The [SimulatorService.java](mdc:card_gui/src/service/SimulatorService.java) maintains:
+```java
+private List<CardInfo> cardList = new ArrayList<>();
+```
+This stores full `CardInfo` objects for GUI display.
+
+### 3. CardInfo Model
+The [CardInfo.java](mdc:card_gui/src/models/CardInfo.java) contains:
+- studentId, holderName, email, department, birthDate, address, status, borrowedBooks
+
+## Data Flow Diagram
+
+```
+GUI Form (6 fields) 
+    ↓
+SimulatorService.setCardInfo()
+    ├── cardList (in-memory) ← Full CardInfo
+    └── APDU → CardInfoManager (3 fields only)
+```
+
+## To Add Persistent Storage
+
+To persist data between app restarts, implement file-based storage:
+
+1. **Save to JSON file** when creating/updating cards
+2. **Load from JSON file** on app startup
+3. **Sync with JavaCard** by writing loaded data to simulator
+
+Example location: `data/cards.json` in project directory
+
+## Applet Storage Limitations
+
+The JavaCard applet only stores 3 core fields due to memory constraints:
+- Card ID: 10 bytes max
+- Name: 50 bytes max  
+- Date: 8 bytes max
+
+Extra fields (Email, Department, Address) must be stored externally.

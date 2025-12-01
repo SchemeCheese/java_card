@@ -1,0 +1,32 @@
+---
+alwaysApply: true
+---
+# Library Card JavaCard Project Structure
+
+This is a **JavaCard-based Library Management System** using JCardSim simulator.
+
+## Architecture Layers
+
+### Applet Layer (`card_gui/src/applet/`)
+JavaCard applet code running on the simulated card:
+- [LibraryCardApplet.java](mdc:card_gui/src/applet/LibraryCardApplet.java) - Main applet router
+- [AppletConstants.java](mdc:card_gui/src/applet/AppletConstants.java) - APDU constants, field lengths
+- [PinManager.java](mdc:card_gui/src/applet/PinManager.java) - PIN operations with PBKDF2
+- [CardInfoManager.java](mdc:card_gui/src/applet/CardInfoManager.java) - Card info storage (ID, Name, Date)
+- [BookManager.java](mdc:card_gui/src/applet/BookManager.java) - Book borrowing
+
+### Service Layer (`card_gui/src/service/`)
+- [SimulatorService.java](mdc:card_gui/src/service/SimulatorService.java) - Bridge between GUI and applet
+
+### GUI Layer (`card_gui/src/pages/`)
+- [SettingsPage.java](mdc:card_gui/src/pages/SettingsPage.java) - Card creation and management
+
+### Models (`card_gui/src/models/`)
+- [CardInfo.java](mdc:card_gui/src/models/CardInfo.java) - Card data model (6 fields)
+- [BorrowedBook.java](mdc:card_gui/src/models/BorrowedBook.java) - Book model
+
+## Key Entry Points
+- Run `main()` in [LibraryCardMainFrame.java](mdc:card_gui/src/LibraryCardMainFrame.java)
+
+## Important Limitation
+**JCardSim does not persist data.** All card data is lost when app closes.
