@@ -2,23 +2,32 @@ package pages;
 
 import constants.AppConstants;
 import models.BorrowedBook;
+import models.CardInfo;
+import service.SimulatorService;
 import ui.RoundedBorder;
 
 import javax.swing.*;
 import javax.swing.border.*;
 import javax.swing.table.*;
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Mượn / Trả Sách Page - UI cải tiến
+ * [UPDATED] Tích hợp SimulatorService
  */
 public class BorrowedBooksPage extends JPanel {
     
+    private SimulatorService simulatorService;
     private List<BorrowedBook> borrowedBooks;
     
-    public BorrowedBooksPage(List<BorrowedBook> borrowedBooks) {
-        this.borrowedBooks = borrowedBooks;
+    public BorrowedBooksPage(SimulatorService simulatorService) {
+        this.simulatorService = simulatorService;
+        // Demo data for now
+        this.borrowedBooks = new ArrayList<>();
+        borrowedBooks.add(new BorrowedBook("NV001", "Nhà Giả Kim", "15/05/2024", "29/05/2024", "Đang mượn", 0));
+        borrowedBooks.add(new BorrowedBook("DB002", "Đắc Nhân Tâm", "01/05/2024", "15/05/2024", "Quá hạn", 12));
         
         setLayout(new BorderLayout());
         setBackground(AppConstants.BACKGROUND);

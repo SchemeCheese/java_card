@@ -13,6 +13,8 @@ public class CardInfo {
     private String address;        // Địa chỉ
     private String status;         // Trạng thái thẻ (Hoạt động / Khóa)
     private int borrowedBooks;     // Số sách đang mượn
+    private String pin;            // Mã PIN của sinh viên
+    private long balance;          // Số dư tài khoản
 
     public CardInfo() {
         this.studentId = "";
@@ -23,6 +25,8 @@ public class CardInfo {
         this.address = "";
         this.status = "Hoạt động";
         this.borrowedBooks = 0;
+        this.pin = "000000";  // PIN mặc định
+        this.balance = 0;
     }
 
     public CardInfo(String studentId, String holderName, String email, 
@@ -35,6 +39,8 @@ public class CardInfo {
         this.address = address;
         this.status = "Hoạt động";
         this.borrowedBooks = 0;
+        this.pin = "000000";  // PIN mặc định
+        this.balance = 0;
     }
 
     // Getters and Setters
@@ -100,6 +106,22 @@ public class CardInfo {
 
     public void setBorrowedBooks(int borrowedBooks) {
         this.borrowedBooks = borrowedBooks;
+    }
+
+    public String getPin() {
+        return pin;
+    }
+
+    public void setPin(String pin) {
+        this.pin = pin;
+    }
+
+    public long getBalance() {
+        return balance;
+    }
+
+    public void setBalance(long balance) {
+        this.balance = balance;
     }
 
     public boolean isInitialized() {

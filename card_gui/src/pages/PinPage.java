@@ -52,26 +52,27 @@ public class PinPage extends JPanel {
                 new RoundedBorder(AppConstants.BORDER_COLOR, 1, 16),
                 new EmptyBorder(40, 50, 40, 50)
         ));
-        mainCard.setPreferredSize(new Dimension(950, 700));
-        mainCard.setMinimumSize(new Dimension(800, 600));
+        mainCard.setPreferredSize(new Dimension(950, 800));
+        mainCard.setMinimumSize(new Dimension(800, 750));
 
         // Header
         mainCard.add(createHeader());
-        mainCard.add(Box.createVerticalStrut(35));
+        mainCard.add(Box.createVerticalStrut(25));
 
         // Verify PIN Section
         mainCard.add(createVerifySection());
-        mainCard.add(Box.createVerticalStrut(35));
+        mainCard.add(Box.createVerticalStrut(25));
 
         // Separator
         JSeparator sep = new JSeparator();
         sep.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
         sep.setForeground(new Color(229, 231, 235));
         mainCard.add(sep);
-        mainCard.add(Box.createVerticalStrut(35));
+        mainCard.add(Box.createVerticalStrut(25));
 
         // Change PIN Section
         mainCard.add(createChangeSection());
+        mainCard.add(Box.createVerticalStrut(20));
 
         wrapper.add(mainCard);
         add(wrapper, BorderLayout.CENTER);
@@ -273,11 +274,18 @@ public class PinPage extends JPanel {
             studentCodeField.setForeground(Color.GRAY);
             studentCodeField.setEnabled(true);
             logoutBtn.setVisible(false);
+            clearPinFields();
             
             JOptionPane.showMessageDialog(this,
                     "Đã đăng xuất thành công!",
                     "Thông báo", JOptionPane.INFORMATION_MESSAGE);
         }
+    }
+
+    private void clearPinFields() {
+        oldPinField.setText("");
+        newPinField.setText("");
+        confirmPinField.setText("");
     }
 
     private JPanel createVerifySection() {
@@ -350,59 +358,72 @@ public class PinPage extends JPanel {
                 return;
             }
 
-            try {
-                // Kiểm tra role trước
-                boolean isAdmin = applet.AppletConstants.ADMIN_STUDENT_CODE.equalsIgnoreCase(studentCode);
-                
-                // Nếu không phải Admin, kiểm tra thẻ có tồn tại không
-                if (!isAdmin && !simulatorService.isCardExists(studentCode)) {
+            // Kiểm tra role trước
+            boolean isAdmin = applet.AppletConstants.ADMIN_STUDENT_CODE.equalsIgnoreCase(studentCode);
+            String pinStr = new String(pin);
+            
+            // Nếu không phải Admin
+            if (!isAdmin) {
+                // Kiểm tra thẻ có tồn tại không
+                if (!simulatorService.isCardExists(studentCode)) {
                     JOptionPane.showMessageDialog(this, 
                             "Mã số sinh viên không tồn tại trong hệ thống!\nVui lòng liên hệ Admin để được cấp thẻ.", 
                             "Lỗi", JOptionPane.ERROR_MESSAGE);
                     return;
                 }
                 
-                boolean success = simulatorService.verifyPin(pin);
+                // Kiểm tra thẻ có bị khóa không
+                models.CardInfo card = simulatorService.getCardByStudentCode(studentCode);
+                if (card != null && "Khóa".equals(card.getStatus())) {
+                    JOptionPane.showMessageDialog(this, 
+                            "Thẻ của bạn đã bị khóa!\nVui lòng liên hệ Admin để được hỗ trợ.", 
+                            "Thẻ bị khóa", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                
+                // Xác thực PIN của sinh viên
+                boolean success = simulatorService.verifyStudentPin(studentCode, pinStr);
                 if (success) {
-                    // Lưu student code vào service để sử dụng sau
                     simulatorService.setCurrentStudentCode(studentCode);
-                    
-                    // Tự động xác định role
-                    String role = isAdmin ? "Admin" : "normal";
-                    simulatorService.setCurrentRole(role);
-                    
-                    // Cập nhật giao diện sang trạng thái verified
+                    simulatorService.setCurrentRole("normal");
+                    simulatorService.setPinVerified(true);
                     setVerifiedState();
                     
-                    if (isAdmin) {
+                    // Hiện thông báo khuyến khích đổi PIN nếu đang dùng PIN mặc định
+                    if ("000000".equals(pinStr)) {
+                        JOptionPane.showMessageDialog(this, 
+                                "Xác thực thành công!\n\n" +
+                                "Lưu ý: Bạn đang sử dụng mã PIN mặc định.\n" +
+                                "Vui lòng đổi mã PIN để bảo mật tài khoản.", 
+                                "Thông báo", JOptionPane.WARNING_MESSAGE);
+                    } else {
+                        JOptionPane.showMessageDialog(this, 
+                                "Xác thực thành công!", 
+                                "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                    }
+                } else {
+                    JOptionPane.showMessageDialog(this, "PIN không đúng!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                }
+            } else {
+                // Admin - sử dụng PIN của simulator
+                try {
+                    boolean success = simulatorService.verifyPin(pin);
+                    if (success) {
+                        simulatorService.setCurrentStudentCode(studentCode);
+                        simulatorService.setCurrentRole("Admin");
+                        setVerifiedState();
                         JOptionPane.showMessageDialog(this, 
                                 "Xác thực Admin thành công!", 
                                 "Thông báo", JOptionPane.INFORMATION_MESSAGE);
                     } else {
-                        // Hiện thông báo khuyến khích đổi PIN cho sinh viên đăng nhập lần đầu
+                        int tries = simulatorService.getPinTriesRemaining();
                         JOptionPane.showMessageDialog(this, 
-                                "Xác thực thành công!\n\n" +
-                                "Lưu ý: Nếu đây là lần đầu đăng nhập,\n" +
-                                "vui lòng đổi mã PIN mặc định để bảo mật tài khoản.", 
-                                "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                                "PIN sai! Số lần thử còn lại: " + tries, 
+                                "Lỗi", JOptionPane.ERROR_MESSAGE);
                     }
-                } else {
-                    int tries = simulatorService.getPinTriesRemaining();
-                    String msg = "PIN sai! Số lần thử còn lại: " + tries;
-                    if (tries == 0) {
-                        msg = "Thẻ đã bị khóa! Vui lòng liên hệ Admin.";
-                        lockInterfaceState(); // Khóa giao diện ngay lập tức
-                    } else {
-                        setUnverifiedState(); // Cập nhật lại số lần thử
-                    }
-                    JOptionPane.showMessageDialog(this, msg, "Lỗi", JOptionPane.ERROR_MESSAGE);
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(this, ex.getMessage(), "Lỗi hệ thống", JOptionPane.ERROR_MESSAGE);
                 }
-            } catch (Exception ex) {
-                // Nếu dính exception thẻ bị khóa (0x6983)
-                if (ex.getMessage().contains("khóa") || simulatorService.getPinTriesRemaining() == 0) {
-                    lockInterfaceState();
-                }
-                JOptionPane.showMessageDialog(this, ex.getMessage(), "Lỗi hệ thống", JOptionPane.ERROR_MESSAGE);
             }
         });
 
@@ -496,42 +517,55 @@ public class PinPage extends JPanel {
         changeBtn.addActionListener((ActionEvent e) -> {
             if (simulatorService == null) return;
 
-            char[] oldPin = oldPinField.getPassword();
-            char[] newPin = newPinField.getPassword();
-            char[] confirm = confirmPinField.getPassword();
+            String oldPinStr = new String(oldPinField.getPassword());
+            String newPinStr = new String(newPinField.getPassword());
+            String confirmStr = new String(confirmPinField.getPassword());
 
-            if (!String.valueOf(newPin).equals(String.valueOf(confirm))) {
+            if (oldPinStr.isEmpty() || newPinStr.isEmpty() || confirmStr.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Vui lòng nhập đầy đủ thông tin!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            if (!newPinStr.equals(confirmStr)) {
                 JOptionPane.showMessageDialog(this, "PIN mới và xác nhận không khớp!", "Lỗi", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
-            try {
-                // Verify PIN cũ trước khi đổi (Server check)
-                boolean verified = simulatorService.verifyPin(oldPin);
-                if (!verified) {
-                    int tries = simulatorService.getPinTriesRemaining();
-                    if (tries == 0) lockInterfaceState();
-                    else setUnverifiedState(); // Sai PIN cũ -> mất trạng thái verified
+            if (newPinStr.length() < 6) {
+                JOptionPane.showMessageDialog(this, "PIN mới phải có ít nhất 6 ký tự!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
 
-                    JOptionPane.showMessageDialog(this, "PIN cũ không đúng! Số lần thử còn lại: " + tries, "Lỗi", JOptionPane.ERROR_MESSAGE);
-                    return;
+            String currentStudentCode = simulatorService.getCurrentStudentCode();
+            boolean isAdmin = "Admin".equals(simulatorService.getCurrentRole());
+
+            if (isAdmin) {
+                // Admin - đổi PIN của simulator
+                try {
+                    boolean verified = simulatorService.verifyPin(oldPinStr.toCharArray());
+                    if (!verified) {
+                        JOptionPane.showMessageDialog(this, "PIN cũ không đúng!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+                    boolean success = simulatorService.changePin(oldPinStr.toCharArray(), newPinStr.toCharArray());
+                    if (success) {
+                        JOptionPane.showMessageDialog(this, "Đổi PIN Admin thành công!\nVui lòng đăng nhập lại.", "Thành công", JOptionPane.INFORMATION_MESSAGE);
+                        clearPinFields();
+                        setUnverifiedState();
+                    }
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(this, "Lỗi: " + ex.getMessage(), "Lỗi hệ thống", JOptionPane.ERROR_MESSAGE);
                 }
-
-                boolean success = simulatorService.changePin(oldPin, newPin);
+            } else {
+                // Sinh viên - đổi PIN riêng của sinh viên
+                boolean success = simulatorService.changeStudentPin(currentStudentCode, oldPinStr, newPinStr);
                 if (success) {
-                    JOptionPane.showMessageDialog(this, "Đổi PIN thành công! Vui lòng đăng nhập lại.", "Thành công", JOptionPane.INFORMATION_MESSAGE);
-                    oldPinField.setText("");
-                    newPinField.setText("");
-                    confirmPinField.setText("");
-
-                    // Reset về trạng thái chưa xác thực, buộc user nhập lại PIN mới
+                    JOptionPane.showMessageDialog(this, "Đổi PIN thành công!\nVui lòng đăng nhập lại với PIN mới.", "Thành công", JOptionPane.INFORMATION_MESSAGE);
+                    clearPinFields();
                     setUnverifiedState();
+                } else {
+                    JOptionPane.showMessageDialog(this, "PIN cũ không đúng!", "Lỗi", JOptionPane.ERROR_MESSAGE);
                 }
-            } catch (Exception ex) {
-                if (ex.getMessage().contains("khóa") || simulatorService.getPinTriesRemaining() == 0) {
-                    lockInterfaceState();
-                }
-                JOptionPane.showMessageDialog(this, "Lỗi: " + ex.getMessage(), "Lỗi hệ thống", JOptionPane.ERROR_MESSAGE);
             }
         });
 

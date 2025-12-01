@@ -92,6 +92,29 @@ public class SimulatorService {
         return null;
     }
 
+    /**
+     * Xác thực PIN của sinh viên (không phải Admin)
+     */
+    public boolean verifyStudentPin(String studentCode, String pin) {
+        CardInfo card = getCardByStudentCode(studentCode);
+        if (card != null) {
+            return card.getPin().equals(pin);
+        }
+        return false;
+    }
+
+    /**
+     * Đổi PIN cho sinh viên
+     */
+    public boolean changeStudentPin(String studentCode, String oldPin, String newPin) {
+        CardInfo card = getCardByStudentCode(studentCode);
+        if (card != null && card.getPin().equals(oldPin)) {
+            card.setPin(newPin);
+            return true;
+        }
+        return false;
+    }
+
     public void connect() throws Exception {
         simulator = new Simulator();
         // Sử dụng AppletConstants.APPLET_AID thay vì DEFAULT_AID

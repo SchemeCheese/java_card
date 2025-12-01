@@ -320,9 +320,7 @@ public class LibraryCardMainFrame extends JFrame {
     private void showCardInfoPage() {
         currentPage = "cardInfo";
         mainContentPanel.removeAll();
-        CardInfoPage cardInfoPage = new CardInfoPage(
-                studentId, studentName, birthDate, email, phone, major, address
-        );
+        CardInfoPage cardInfoPage = new CardInfoPage(simulatorService);
         mainContentPanel.add(cardInfoPage);
         mainContentPanel.revalidate();
         mainContentPanel.repaint();
@@ -331,7 +329,7 @@ public class LibraryCardMainFrame extends JFrame {
     private void showBorrowedBooksPage() {
         currentPage = "books";
         mainContentPanel.removeAll();
-        BorrowedBooksPage booksPage = new BorrowedBooksPage(borrowedBooks);
+        BorrowedBooksPage booksPage = new BorrowedBooksPage(simulatorService);
         mainContentPanel.add(booksPage);
         mainContentPanel.revalidate();
         mainContentPanel.repaint();
@@ -340,7 +338,7 @@ public class LibraryCardMainFrame extends JFrame {
     private void showFinancePage() {
         currentPage = "finance";
         mainContentPanel.removeAll();
-        FinancePage financePage = new FinancePage(balance, transactions);
+        FinancePage financePage = new FinancePage(simulatorService);
         mainContentPanel.add(financePage);
         mainContentPanel.revalidate();
         mainContentPanel.repaint();

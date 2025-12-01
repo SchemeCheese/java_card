@@ -1,7 +1,9 @@
 package pages;
 
 import constants.AppConstants;
+import models.CardInfo;
 import models.Transaction;
+import service.SimulatorService;
 import ui.RoundedBorder;
 
 import javax.swing.*;
@@ -9,21 +11,32 @@ import javax.swing.border.*;
 import javax.swing.table.*;
 import java.awt.*;
 import java.text.NumberFormat;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 /**
  * Tài Chính Page - UI cải tiến
+ * [UPDATED] Tích hợp SimulatorService
  */
 public class FinancePage extends JPanel {
     
+    private SimulatorService simulatorService;
     private long balance;
     private List<Transaction> transactions;
     private static final Color GOLD_COLOR = new Color(234, 179, 8);
     
-    public FinancePage(long balance, List<Transaction> transactions) {
-        this.balance = balance;
-        this.transactions = transactions;
+    public FinancePage(SimulatorService simulatorService) {
+        this.simulatorService = simulatorService;
+        
+        // Lấy số dư từ thẻ sinh viên
+        String studentCode = simulatorService.getCurrentStudentCode();
+        CardInfo cardInfo = simulatorService.getCardByStudentCode(studentCode);
+        this.balance = cardInfo != null ? cardInfo.getBalance() : 0;
+        
+        // Demo transactions
+        this.transactions = new ArrayList<>();
+        transactions.add(new Transaction("20/07/2023", "Nạp tiền", 100000, "Thành công"));
         
         setLayout(new BorderLayout());
         setBackground(AppConstants.BACKGROUND);
