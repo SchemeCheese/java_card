@@ -43,10 +43,13 @@ public class AppletConstants {
     public static final byte BOOK_ID_LENGTH = (byte)8;
 
     // Default Values (Thêm vào để SimulatorService sử dụng)
-    public static final String DEFAULT_PIN = "123456";
+    public static final String DEFAULT_PIN = "000000";  // 6 số 0
     public static final int DEFAULT_PIN_TRIES = 3;
 
-    // Admin Key
+    // Admin Credentials (Fixed)
+    public static final String ADMIN_STUDENT_CODE = "CT060132";  // MSSV của Admin
+    
+    // Admin Key (Legacy)
     public static final byte[] ADMIN_KEY = {
             (byte)0x41, (byte)0x44, (byte)0x4D, (byte)0x49  // "ADMI"
     };

@@ -1,5 +1,6 @@
 import com.formdev.flatlaf.FlatLightLaf;
-import constants.AppConstants; // Vẫn giữ cho màu sắc giao diện
+import applet.AppletConstants;
+import constants.AppConstants;
 import models.BorrowedBook;
 import models.Transaction;
 import pages.*;
@@ -54,11 +55,10 @@ public class LibraryCardMainFrame extends JFrame {
             simulatorService.connect();
             System.out.println("Simulator connected successfully.");
 
-            // Tự động tạo PIN mặc định (123456) nếu thẻ chưa có PIN
-            // Lưu ý: Lệnh này sẽ throw exception nếu PIN đã tồn tại, ta sẽ catch và bỏ qua
+            // Tự động tạo PIN mặc định (000000) nếu thẻ chưa có PIN
             try {
                 simulatorService.createDemoPin();
-                System.out.println("Default PIN (123456) created.");
+                System.out.println("Default PIN (000000) created.");
             } catch (Exception e) {
                 System.out.println("PIN already exists or error creating PIN: " + e.getMessage());
             }
@@ -190,7 +190,7 @@ public class LibraryCardMainFrame extends JFrame {
         }));
 
         tabLabels.put("settings", createTab("", "Hệ Thống", false, () -> {
-            if (checkPinStatus()) showSettingsPage();
+            checkAdminAccess(); // Chỉ hiện dialog, không chuyển tab
         }));
 
         tabLabels.values().forEach(tabsPanel::add);
@@ -212,6 +212,28 @@ public class LibraryCardMainFrame extends JFrame {
         }
         return true;
     }
+    
+    // Hàm kiểm tra quyền Admin cho tab Hệ Thống
+    private void checkAdminAccess() {
+        if (!simulatorService.isPinVerified()) {
+            JOptionPane.showMessageDialog(this,
+                    "Vui lòng xác thực PIN để truy cập chức năng này!",
+                    "Yêu cầu xác thực", JOptionPane.WARNING_MESSAGE);
+            return; // Không chuyển tab, chỉ hiện dialog
+        }
+        
+        // Kiểm tra role là Admin
+        if (!"Admin".equals(simulatorService.getCurrentRole())) {
+            JOptionPane.showMessageDialog(this,
+                    "Chỉ Admin mới có quyền truy cập Hệ Thống!",
+                    "Không có quyền", JOptionPane.WARNING_MESSAGE);
+            return; // Không chuyển tab, chỉ hiện dialog
+        }
+        
+        // Nếu là Admin, chuyển đến trang Settings
+        showSettingsPage();
+        updateTabHighlights(tabLabels.get("settings"));
+    }
 
     private JLabel createTab(String icon, String text, boolean active, Runnable onClick) {
         String tabText = icon.isEmpty() ? text : icon + " " + text;
@@ -231,6 +253,11 @@ public class LibraryCardMainFrame extends JFrame {
 
                 // Nếu đang ở trang PIN và chưa verify, không highlight tab khác
                 if (!simulatorService.isPinVerified() && !text.equals("PIN & Bảo Mật")) {
+                    return;
+                }
+                
+                // Nếu tab Hệ Thống mà không phải Admin, không highlight
+                if (text.equals("Hệ Thống") && !"Admin".equals(simulatorService.getCurrentRole())) {
                     return;
                 }
 

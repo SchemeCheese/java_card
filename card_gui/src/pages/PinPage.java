@@ -24,8 +24,10 @@ public class PinPage extends JPanel {
     private JLabel triesLabel;
 
     // Các component cần enable/disable
+    private JTextField studentCodeField;
     private JPasswordField pinField;
     private JButton verifyBtn;
+    private JButton logoutBtn;
     private JButton changeBtn;
     private JPasswordField oldPinField;
     private JPasswordField newPinField;
@@ -108,10 +110,13 @@ public class PinPage extends JPanel {
         triesLabel.setForeground(AppConstants.DANGER_COLOR);
 
         // Disable verify section
+        studentCodeField.setEnabled(false);
         pinField.setEnabled(false);
-        pinField.setText("Thẻ đã bị khóa!");
+        pinField.setText("");
+        pinField.setBackground(new Color(254, 226, 226)); // Đỏ nhạt
         verifyBtn.setEnabled(false);
         verifyBtn.setBackground(Color.GRAY);
+        logoutBtn.setVisible(false);
 
         // Disable change section
         disableChangeSection();
@@ -128,12 +133,16 @@ public class PinPage extends JPanel {
         triesLabel.setText("3/3"); // Reset visual counter
 
         // Disable input verify vì không cần nữa
+        studentCodeField.setEnabled(false);
         pinField.setEnabled(false);
-        pinField.setText("PIN đã được xác thực");
+        pinField.setText("");
         pinField.setBackground(new Color(240, 253, 244)); // Xanh nhạt
         verifyBtn.setEnabled(false);
         verifyBtn.setText("Đã Xác Thực");
         verifyBtn.setBackground(AppConstants.SUCCESS_COLOR);
+        
+        // Hiện nút đăng xuất
+        logoutBtn.setVisible(true);
 
         // Enable change PIN section
         enableChangeSection();
@@ -151,12 +160,16 @@ public class PinPage extends JPanel {
         }
 
         // Enable verify section
+        studentCodeField.setEnabled(true);
         pinField.setEnabled(true);
-        pinField.setText("Nhập 6-8 ký tự số");
+        pinField.setText("");
         pinField.setBackground(Color.WHITE);
         verifyBtn.setEnabled(true);
         verifyBtn.setText("Xác Thực");
         verifyBtn.setBackground(AppConstants.PRIMARY_COLOR);
+        
+        // Ẩn nút đăng xuất
+        logoutBtn.setVisible(false);
 
         // Disable change section (phải verify trước mới được đổi)
         disableChangeSection();
@@ -184,10 +197,15 @@ public class PinPage extends JPanel {
         panel.setBackground(Color.WHITE);
         panel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        // Title row with icon
-        JPanel titleRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        // Title row with icon and logout button
+        JPanel titleRow = new JPanel(new BorderLayout());
         titleRow.setBackground(Color.WHITE);
         titleRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+        titleRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+
+        // Left side - icon and title
+        JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        leftPanel.setBackground(Color.WHITE);
 
         // Icon panel (lock symbol)
         JPanel iconPanel = new JPanel() {
@@ -213,8 +231,16 @@ public class PinPage extends JPanel {
         title.setForeground(AppConstants.TEXT_PRIMARY);
         title.setBorder(new EmptyBorder(0, 12, 0, 0));
 
-        titleRow.add(iconPanel);
-        titleRow.add(title);
+        leftPanel.add(iconPanel);
+        leftPanel.add(title);
+
+        // Right side - logout button
+        logoutBtn = createPrimaryButton("Đăng Xuất", AppConstants.DANGER_COLOR, 120, 36);
+        logoutBtn.setVisible(false); // Ẩn khi chưa đăng nhập
+        logoutBtn.addActionListener(e -> handleLogout());
+
+        titleRow.add(leftPanel, BorderLayout.WEST);
+        titleRow.add(logoutBtn, BorderLayout.EAST);
 
         // Subtitle
         JLabel subtitle = new JLabel("Quản lý mã PIN và các cài đặt bảo mật cho thẻ của bạn.");
@@ -227,6 +253,31 @@ public class PinPage extends JPanel {
         panel.add(subtitle);
 
         return panel;
+    }
+
+    private void handleLogout() {
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Bạn có chắc chắn muốn đăng xuất?",
+                "Xác nhận đăng xuất",
+                JOptionPane.YES_NO_OPTION);
+        
+        if (confirm == JOptionPane.YES_OPTION) {
+            if (simulatorService != null) {
+                simulatorService.setPinVerified(false);
+                simulatorService.setCurrentStudentCode("");
+                simulatorService.setCurrentRole("normal");
+            }
+            // Reset giao diện
+            setUnverifiedState();
+            studentCodeField.setText("Nhập MSSV của bạn");
+            studentCodeField.setForeground(Color.GRAY);
+            studentCodeField.setEnabled(true);
+            logoutBtn.setVisible(false);
+            
+            JOptionPane.showMessageDialog(this,
+                    "Đã đăng xuất thành công!",
+                    "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+        }
     }
 
     private JPanel createVerifySection() {
@@ -255,14 +306,27 @@ public class PinPage extends JPanel {
         leftPanel.setBackground(Color.WHITE);
         leftPanel.setAlignmentY(Component.TOP_ALIGNMENT);
 
-        JLabel inputLabel = new JLabel("Nhập mã PIN của bạn");
+        // Student Code field
+        JLabel studentCodeLabel = new JLabel("Mã số sinh viên (MSSV)");
+        studentCodeLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        studentCodeLabel.setForeground(AppConstants.TEXT_SECONDARY);
+        studentCodeLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        leftPanel.add(studentCodeLabel);
+        leftPanel.add(Box.createVerticalStrut(8));
+
+        studentCodeField = createTextField("Nhập MSSV của bạn", 380);
+        leftPanel.add(studentCodeField);
+        leftPanel.add(Box.createVerticalStrut(15));
+
+        // PIN field
+        JLabel inputLabel = new JLabel("Nhập mã PIN của bạn (mặc định: 000000)");
         inputLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         inputLabel.setForeground(AppConstants.TEXT_SECONDARY);
         inputLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         leftPanel.add(inputLabel);
         leftPanel.add(Box.createVerticalStrut(8));
 
-        pinField = createPasswordField("Nhập 6-8 ký tự số", 380);
+        pinField = createPasswordField("Nhập 6 ký tự số", 380);
         leftPanel.add(pinField);
         leftPanel.add(Box.createVerticalStrut(18));
 
@@ -272,19 +336,56 @@ public class PinPage extends JPanel {
         verifyBtn.addActionListener((ActionEvent e) -> {
             if (simulatorService == null) return;
 
+            // Kiểm tra MSSV
+            String studentCode = studentCodeField.getText().trim();
+            if (studentCode.isEmpty() || studentCode.equals("Nhập MSSV của bạn")) {
+                JOptionPane.showMessageDialog(this, "Vui lòng nhập Mã số sinh viên!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
             char[] pin = pinField.getPassword();
-            // Nếu người dùng chưa nhập gì hoặc nhập placeholder
-            if (pin.length == 0 || String.valueOf(pin).equals("Nhập 6-8 ký tự số")) {
+            // Nếu người dùng chưa nhập gì
+            if (pin.length == 0) {
                 JOptionPane.showMessageDialog(this, "Vui lòng nhập PIN!", "Lỗi", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
             try {
+                // Kiểm tra role trước
+                boolean isAdmin = applet.AppletConstants.ADMIN_STUDENT_CODE.equalsIgnoreCase(studentCode);
+                
+                // Nếu không phải Admin, kiểm tra thẻ có tồn tại không
+                if (!isAdmin && !simulatorService.isCardExists(studentCode)) {
+                    JOptionPane.showMessageDialog(this, 
+                            "Mã số sinh viên không tồn tại trong hệ thống!\nVui lòng liên hệ Admin để được cấp thẻ.", 
+                            "Lỗi", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                
                 boolean success = simulatorService.verifyPin(pin);
                 if (success) {
-                    JOptionPane.showMessageDialog(this, "Xác thực thành công!", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                    // Lưu student code vào service để sử dụng sau
+                    simulatorService.setCurrentStudentCode(studentCode);
+                    
+                    // Tự động xác định role
+                    String role = isAdmin ? "Admin" : "normal";
+                    simulatorService.setCurrentRole(role);
+                    
                     // Cập nhật giao diện sang trạng thái verified
                     setVerifiedState();
+                    
+                    if (isAdmin) {
+                        JOptionPane.showMessageDialog(this, 
+                                "Xác thực Admin thành công!", 
+                                "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                    } else {
+                        // Hiện thông báo khuyến khích đổi PIN cho sinh viên đăng nhập lần đầu
+                        JOptionPane.showMessageDialog(this, 
+                                "Xác thực thành công!\n\n" +
+                                "Lưu ý: Nếu đây là lần đầu đăng nhập,\n" +
+                                "vui lòng đổi mã PIN mặc định để bảo mật tài khoản.", 
+                                "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                    }
                 } else {
                     int tries = simulatorService.getPinTriesRemaining();
                     String msg = "PIN sai! Số lần thử còn lại: " + tries;
@@ -480,10 +581,9 @@ public class PinPage extends JPanel {
         return panel;
     }
 
-    private JPasswordField createPasswordField(String placeholder, int width) {
-        JPasswordField field = new JPasswordField();
+    private JTextField createTextField(String placeholder, int width) {
+        JTextField field = new JTextField();
         field.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        field.setEchoChar((char) 0);
         field.setText(placeholder);
         field.setForeground(Color.GRAY);
         field.setBackground(Color.WHITE);
@@ -497,18 +597,40 @@ public class PinPage extends JPanel {
 
         field.addFocusListener(new java.awt.event.FocusAdapter() {
             public void focusGained(java.awt.event.FocusEvent e) {
-                if (String.valueOf(field.getPassword()).equals(placeholder)) {
+                if (field.getText().equals(placeholder)) {
                     field.setText("");
-                    field.setEchoChar('\u2022');
                     field.setForeground(AppConstants.TEXT_PRIMARY);
                 }
             }
             public void focusLost(java.awt.event.FocusEvent e) {
-                if (field.getPassword().length == 0) {
-                    field.setEchoChar((char) 0);
+                if (field.getText().isEmpty()) {
                     field.setText(placeholder);
                     field.setForeground(Color.GRAY);
                 }
+            }
+        });
+
+        return field;
+    }
+
+    private JPasswordField createPasswordField(String placeholder, int width) {
+        JPasswordField field = new JPasswordField();
+        field.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        field.setEchoChar('\u2022'); // Luôn ẩn mật khẩu
+        field.setForeground(AppConstants.TEXT_PRIMARY);
+        field.setBackground(Color.WHITE);
+        field.setBorder(BorderFactory.createCompoundBorder(
+                new RoundedBorder(AppConstants.BORDER_COLOR, 1, 8),
+                new EmptyBorder(12, 14, 12, 14)
+        ));
+        field.setPreferredSize(new Dimension(width, 46));
+        field.setMaximumSize(new Dimension(width, 46));
+        field.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        // Xóa nội dung khi focus
+        field.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusGained(java.awt.event.FocusEvent e) {
+                field.selectAll(); // Chọn tất cả để dễ xóa
             }
         });
 

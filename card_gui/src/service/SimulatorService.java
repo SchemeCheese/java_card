@@ -25,6 +25,8 @@ public class SimulatorService {
     private boolean isConnected = false;
     private boolean isPinVerified = false;
     private int pinTriesRemaining = AppletConstants.DEFAULT_PIN_TRIES;
+    private String currentStudentCode = "";
+    private String currentRole = "Sinh viên";  // Default role
 
     // Cấu hình PBKDF2
     private static final int PBKDF2_ITERATIONS = 10000;
@@ -48,6 +50,46 @@ public class SimulatorService {
 
     public void setPinTriesRemaining(int tries) {
         this.pinTriesRemaining = tries;
+    }
+
+    public String getCurrentStudentCode() {
+        return currentStudentCode;
+    }
+
+    public void setCurrentStudentCode(String studentCode) {
+        this.currentStudentCode = studentCode;
+    }
+
+    public String getCurrentRole() {
+        return currentRole;
+    }
+
+    public void setCurrentRole(String role) {
+        this.currentRole = role;
+    }
+
+    /**
+     * Kiểm tra thẻ sinh viên có tồn tại trong hệ thống không
+     */
+    public boolean isCardExists(String studentCode) {
+        for (CardInfo card : cardList) {
+            if (card.getStudentId().equalsIgnoreCase(studentCode)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Lấy thông tin thẻ theo MSSV
+     */
+    public CardInfo getCardByStudentCode(String studentCode) {
+        for (CardInfo card : cardList) {
+            if (card.getStudentId().equalsIgnoreCase(studentCode)) {
+                return card;
+            }
+        }
+        return null;
     }
 
     public void connect() throws Exception {
