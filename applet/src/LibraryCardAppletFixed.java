@@ -27,10 +27,15 @@ public class LibraryCardAppletFixed extends Applet {
     private static final byte INS_RETURN_BOOK = (byte)0x80;
     private static final byte INS_GET_PIN_TRIES = (byte)0x90;
     private static final byte INS_RESET_PIN = (byte)0xA0;
+
+    private static final byte INS_GET_SALT = (byte) 0x18;
+    private static final byte INS_UNBLOCK_PIN = (byte) 0x99;
     
     // Độ dài các trường dữ liệu
     private static final byte PIN_TRY_LIMIT = (byte)3;
-    private static final byte PIN_MAX_SIZE = (byte)8;
+    private static final byte PIN_MAX_SIZE = (byte)16;
+    private static final byte SALT_LENGTH = (byte) 16;
+
     private static final byte CARD_ID_LENGTH = (byte)10;
     private static final byte NAME_MAX_LENGTH = (byte)50;
     private static final byte MAX_BORROWED_BOOKS = (byte)10;
@@ -38,6 +43,7 @@ public class LibraryCardAppletFixed extends Applet {
     
     // Các trường dữ liệu
     private OwnerPIN pin;
+    private byte[] pinSalt;             //n
     private byte[] cardId;
     private byte[] holderName;
     private byte holderNameLength;
@@ -75,6 +81,7 @@ public class LibraryCardAppletFixed extends Applet {
     private void initialize() {
         // Khởi tạo PIN với 3 lần thử
         pin = new OwnerPIN(PIN_TRY_LIMIT, PIN_MAX_SIZE);
+        pinSalt = new byte[SALT_LENGTH];
         
         // Khởi tạo các mảng lưu trữ
         cardId = new byte[CARD_ID_LENGTH];
@@ -108,6 +115,9 @@ public class LibraryCardAppletFixed extends Applet {
         byte ins = buffer[ISO7816.OFFSET_INS];
         
         switch (ins) {
+            case INS_GET_SALT: // Mới
+                getSalt(apdu);
+                break;
             case INS_CREATE_PIN:
                 createPin(apdu);
                 break;
@@ -142,25 +152,33 @@ public class LibraryCardAppletFixed extends Applet {
                 ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
         }
     }
+
+    private void getSalt(APDU apdu) {
+        // Gửi mảng pinSalt về cho PC
+        byte[] buffer = apdu.getBuffer();
+        Util.arrayCopy(pinSalt, (short)0, buffer, (short)0, SALT_LENGTH);
+        apdu.setOutgoingAndSend((short)0, SALT_LENGTH);
+    }
     
     /**
      * Tạo PIN mới (chỉ thực hiện được 1 lần)
      * Format: [PIN_LENGTH][PIN_DATA]
      */
     private void createPin(APDU apdu) {
-        if (pin.isValidated()) {
-            ISOException.throwIt(ISO7816.SW_COMMAND_NOT_ALLOWED);
-        }
-        
+        if (pin.isValidated()) ISOException.throwIt(ISO7816.SW_COMMAND_NOT_ALLOWED);
+
         byte[] buffer = apdu.getBuffer();
-        short bytesRead = apdu.setIncomingAndReceive();
-        byte pinLength = buffer[ISO7816.OFFSET_CDATA];
-        
-        if (pinLength < 4 || pinLength > PIN_MAX_SIZE) {
-            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-        }
-        
-        pin.update(buffer, (short)(ISO7816.OFFSET_CDATA + 1), pinLength);
+        short len = apdu.setIncomingAndReceive();
+
+        // Kiểm tra độ dài: Phải đủ Salt (16) + Hash (16) = 32 bytes
+        if (len < 32) ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+
+        // 1. Lưu Salt
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, pinSalt, (short)0, SALT_LENGTH);
+
+        // 2. Lưu Hash vào OwnerPIN (Dùng 16 byte sau của buffer làm PIN)
+        pin.update(buffer, (short)(ISO7816.OFFSET_CDATA + SALT_LENGTH), PIN_MAX_SIZE);
+
         cardInitialized = true;
     }
     
@@ -170,21 +188,15 @@ public class LibraryCardAppletFixed extends Applet {
      */
     private void verifyPin(APDU apdu) {
         byte[] buffer = apdu.getBuffer();
-        short bytesRead = apdu.setIncomingAndReceive();
-        byte pinLength = buffer[ISO7816.OFFSET_CDATA];
-        
-        if (pin.check(buffer, (short)(ISO7816.OFFSET_CDATA + 1), pinLength)) {
-            // PIN đúng
-            buffer[0] = (byte)0x01;
-        } else {
-            // PIN sai
-            buffer[0] = (byte)0x00;
-            buffer[1] = pin.getTriesRemaining();
-            apdu.setOutgoingAndSend((short)0, (short)2);
-            return;
+        short len = apdu.setIncomingAndReceive();
+
+        // PC phải gửi đúng 16 byte Hash
+        if (len != 16) ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+
+        // So sánh Hash gửi xuống với Hash trong OwnerPIN
+        if (!pin.check(buffer, ISO7816.OFFSET_CDATA, (byte)16)) {
+            ISOException.throwIt((short)(0x63C0 | pin.getTriesRemaining()));
         }
-        
-        apdu.setOutgoingAndSend((short)0, (short)1);
     }
     
     /**

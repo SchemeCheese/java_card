@@ -1,5 +1,5 @@
 import com.formdev.flatlaf.FlatLightLaf;
-import constants.AppConstants;
+import constants.AppConstants; // Vẫn giữ cho màu sắc giao diện
 import models.BorrowedBook;
 import models.Transaction;
 import pages.*;
@@ -13,12 +13,12 @@ import java.util.List;
 
 /**
  * Main frame for Library Card Management System
- * Refactored to use modular components
+ * [UPDATED] Tích hợp kết nối Simulator và kiểm tra PIN khi chuyển tab
  */
 public class LibraryCardMainFrame extends JFrame {
     private JPanel mainContentPanel;
     private SimulatorService simulatorService;
-    
+
     // Data storage
     private String studentId = "";
     private String studentName = "";
@@ -38,11 +38,37 @@ public class LibraryCardMainFrame extends JFrame {
     public LibraryCardMainFrame() {
         super("Library Management System");
         simulatorService = new SimulatorService();
+
+        // Khởi động Simulator ngay khi mở ứng dụng
+        initSimulator();
+
         initSampleData();
         initializeUI();
         setSize(1400, 900);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
+    }
+
+    private void initSimulator() {
+        try {
+            simulatorService.connect();
+            System.out.println("Simulator connected successfully.");
+
+            // Tự động tạo PIN mặc định (123456) nếu thẻ chưa có PIN
+            // Lưu ý: Lệnh này sẽ throw exception nếu PIN đã tồn tại, ta sẽ catch và bỏ qua
+            try {
+                simulatorService.createDemoPin();
+                System.out.println("Default PIN (123456) created.");
+            } catch (Exception e) {
+                System.out.println("PIN already exists or error creating PIN: " + e.getMessage());
+            }
+
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this,
+                    "Lỗi khởi động Simulator: " + e.getMessage(),
+                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+            e.printStackTrace();
+        }
     }
 
     private void initSampleData() {
@@ -147,15 +173,44 @@ public class LibraryCardMainFrame extends JFrame {
         tabsPanel.setBackground(Color.WHITE);
         tabsPanel.setBorder(new EmptyBorder(0, 30, 0, 30));
 
+        // Định nghĩa các tab và hành động click
+        // Lưu ý: Các tab nhạy cảm sẽ kiểm tra isPinVerified trước khi hiển thị
         tabLabels.put("pin", createTab("", "PIN & Bảo Mật", true, this::showPinPage));
-        tabLabels.put("cardInfo", createTab("", "Thông Tin Bạn Đọc", false, this::showCardInfoPage));
-        tabLabels.put("books", createTab("", "Mượn / Trả Sách", false, this::showBorrowedBooksPage));
-        tabLabels.put("finance", createTab("", "Tài Chính", false, this::showFinancePage));
-        tabLabels.put("settings", createTab("", "Hệ Thống", false, this::showSettingsPage));
+
+        tabLabels.put("cardInfo", createTab("", "Thông Tin Bạn Đọc", false, () -> {
+            if (checkPinStatus()) showCardInfoPage();
+        }));
+
+        tabLabels.put("books", createTab("", "Mượn / Trả Sách", false, () -> {
+            if (checkPinStatus()) showBorrowedBooksPage();
+        }));
+
+        tabLabels.put("finance", createTab("", "Tài Chính", false, () -> {
+            if (checkPinStatus()) showFinancePage();
+        }));
+
+        tabLabels.put("settings", createTab("", "Hệ Thống", false, () -> {
+            if (checkPinStatus()) showSettingsPage();
+        }));
 
         tabLabels.values().forEach(tabsPanel::add);
 
         return tabsPanel;
+    }
+
+    // Hàm kiểm tra trạng thái PIN
+    private boolean checkPinStatus() {
+        if (!simulatorService.isPinVerified()) {
+            JOptionPane.showMessageDialog(this,
+                    "Vui lòng xác thực PIN để truy cập chức năng này!",
+                    "Yêu cầu xác thực", JOptionPane.WARNING_MESSAGE);
+            // Chuyển về tab PIN
+            showPinPage();
+            // Cập nhật highlight tab về PIN
+            updateTabHighlights(tabLabels.get("pin"));
+            return false;
+        }
+        return true;
     }
 
     private JLabel createTab(String icon, String text, boolean active, Runnable onClick) {
@@ -164,14 +219,21 @@ public class LibraryCardMainFrame extends JFrame {
         tab.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         tab.setForeground(active ? AppConstants.PRIMARY_COLOR : AppConstants.TEXT_SECONDARY);
         tab.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createMatteBorder(0, 0, active ? 3 : 0, 0, AppConstants.PRIMARY_COLOR),
-            new EmptyBorder(15, 20, 15, 20)
+                BorderFactory.createMatteBorder(0, 0, active ? 3 : 0, 0, AppConstants.PRIMARY_COLOR),
+                new EmptyBorder(15, 20, 15, 20)
         ));
         tab.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
         tab.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseClicked(java.awt.event.MouseEvent evt) {
+                // Thực hiện action (đã bao gồm check PIN)
                 onClick.run();
+
+                // Nếu đang ở trang PIN và chưa verify, không highlight tab khác
+                if (!simulatorService.isPinVerified() && !text.equals("PIN & Bảo Mật")) {
+                    return;
+                }
+
                 updateTabHighlights(tab);
             }
             public void mouseEntered(java.awt.event.MouseEvent evt) {
@@ -192,14 +254,14 @@ public class LibraryCardMainFrame extends JFrame {
             if (tab == activeTab) {
                 tab.setForeground(AppConstants.PRIMARY_COLOR);
                 tab.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createMatteBorder(0, 0, 3, 0, AppConstants.PRIMARY_COLOR),
-                    new EmptyBorder(15, 20, 15, 20)
+                        BorderFactory.createMatteBorder(0, 0, 3, 0, AppConstants.PRIMARY_COLOR),
+                        new EmptyBorder(15, 20, 15, 20)
                 ));
             } else {
                 tab.setForeground(AppConstants.TEXT_SECONDARY);
                 tab.setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createMatteBorder(0, 0, 0, 0, AppConstants.PRIMARY_COLOR),
-                    new EmptyBorder(15, 20, 15, 20)
+                        BorderFactory.createMatteBorder(0, 0, 0, 0, AppConstants.PRIMARY_COLOR),
+                        new EmptyBorder(15, 20, 15, 20)
                 ));
             }
         }
@@ -221,7 +283,8 @@ public class LibraryCardMainFrame extends JFrame {
     private void showPinPage() {
         currentPage = "pin";
         mainContentPanel.removeAll();
-        PinPage pinPage = new PinPage();
+        // Truyền simulatorService vào PinPage để xử lý logic verify
+        PinPage pinPage = new PinPage(simulatorService);
         mainContentPanel.add(pinPage);
         mainContentPanel.revalidate();
         mainContentPanel.repaint();
@@ -231,7 +294,7 @@ public class LibraryCardMainFrame extends JFrame {
         currentPage = "cardInfo";
         mainContentPanel.removeAll();
         CardInfoPage cardInfoPage = new CardInfoPage(
-            studentId, studentName, birthDate, email, phone, major, address
+                studentId, studentName, birthDate, email, phone, major, address
         );
         mainContentPanel.add(cardInfoPage);
         mainContentPanel.revalidate();
