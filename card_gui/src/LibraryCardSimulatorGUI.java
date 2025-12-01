@@ -445,8 +445,8 @@ public class LibraryCardSimulatorGUI extends JFrame {
             
             AID aid = new AID(APPLET_AID, (short)0, (byte)APPLET_AID.length);
             
-            // Cần load class LibraryCardAppletFixed
-            String appletClassName = "LibraryCardAppletFixed";
+            // Load class LibraryCardApplet (modular version)
+            String appletClassName = "applet.LibraryCardApplet";
             Class<?> appletClass = Class.forName(appletClassName);
             
             @SuppressWarnings("unchecked")

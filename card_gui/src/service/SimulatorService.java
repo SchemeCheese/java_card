@@ -39,7 +39,7 @@ public class SimulatorService {
         simulator = new Simulator();
         AID aid = new AID(AppConstants.APPLET_AID, (short)0, (byte)AppConstants.APPLET_AID.length);
 
-        String appletClassName = "LibraryCardAppletFixed";
+        String appletClassName = "applet.LibraryCardApplet";
         Class<?> appletClass = Class.forName(appletClassName);
 
         @SuppressWarnings("unchecked")
