@@ -29,6 +29,13 @@
                 </exclusion>
             </exclusions>
         </dependency>
+
+        <!-- FlatLaf for modern UI -->
+        <dependency>
+            <groupId>com.formdev</groupId>
+            <artifactId>flatlaf</artifactId>
+            <version>3.2.5</version>
+        </dependency>
     </dependencies>
 
     <build>
