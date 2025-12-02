@@ -31,6 +31,8 @@ public class BorrowedBooksPage extends JPanel {
     private JTextField borrowField;
     private JTextField returnField;
     private JPanel rightPanel;
+    private JPanel leftPanel;
+    private JPanel mainPanel;
     
     // Mock data cho thư viện sách
     private static final Map<String, String> BOOK_CATALOG = new HashMap<>();
@@ -58,17 +60,27 @@ public class BorrowedBooksPage extends JPanel {
         setBackground(AppConstants.BACKGROUND);
         setBorder(new EmptyBorder(30, 40, 30, 40));
         
-        JPanel mainPanel = new JPanel(new BorderLayout(25, 0));
+        mainPanel = new JPanel(new BorderLayout(25, 0));
         mainPanel.setBackground(AppConstants.BACKGROUND);
         
-        JPanel leftPanel = createLeftPanel();
+        leftPanel = createLeftPanel();
         rightPanel = createRightPanel();
-        rightPanel.setPreferredSize(new Dimension(340, 0));
-        rightPanel.setMinimumSize(new Dimension(300, 400));
-        rightPanel.setMaximumSize(new Dimension(340, Integer.MAX_VALUE));
+        
+        // Wrap rightPanel in a fixed-size container to prevent ANY layout shifts
+        JPanel rightPanelWrapper = new JPanel(new BorderLayout());
+        rightPanelWrapper.setBackground(AppConstants.BACKGROUND);
+        // CRITICAL: Set all size constraints to exactly 340px width - no flexibility
+        rightPanelWrapper.setPreferredSize(new Dimension(340, Integer.MAX_VALUE));
+        rightPanelWrapper.setMinimumSize(new Dimension(340, 400));
+        rightPanelWrapper.setMaximumSize(new Dimension(340, Integer.MAX_VALUE));
+        rightPanelWrapper.add(rightPanel, BorderLayout.CENTER);
+        
+        // Set fixed size constraints for left panel
+        leftPanel.setPreferredSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+        leftPanel.setMinimumSize(new Dimension(500, 400));
         
         mainPanel.add(leftPanel, BorderLayout.CENTER);
-        mainPanel.add(rightPanel, BorderLayout.EAST);
+        mainPanel.add(rightPanelWrapper, BorderLayout.EAST);
         
         add(mainPanel, BorderLayout.CENTER);
     }
@@ -92,6 +104,9 @@ public class BorrowedBooksPage extends JPanel {
             new RoundedBorder(AppConstants.BORDER_COLOR, 1, 16),
             new EmptyBorder(30, 35, 30, 35)
         ));
+        // Set fixed size constraints to prevent layout shifts
+        panel.setPreferredSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+        panel.setMinimumSize(new Dimension(500, 400));
         
         JPanel headerSection = new JPanel();
         headerSection.setLayout(new BoxLayout(headerSection, BoxLayout.Y_AXIS));
@@ -236,6 +251,8 @@ public class BorrowedBooksPage extends JPanel {
         JScrollPane scrollPane = new JScrollPane(table);
         scrollPane.setBorder(BorderFactory.createLineBorder(AppConstants.BORDER_COLOR));
         scrollPane.getViewport().setBackground(Color.WHITE);
+        // Set fixed preferred size to prevent layout shifts
+        scrollPane.setPreferredSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
         
         panel.add(scrollPane, BorderLayout.CENTER);
         
@@ -265,37 +282,76 @@ public class BorrowedBooksPage extends JPanel {
             tableModel.addRow(row);
         }
         
-        // Force table to update layout only once - only revalidate table, not parent panels
+        // Only repaint table, do NOT revalidate to prevent layout shifts
         if (table != null) {
-            table.revalidate();
             table.repaint();
         }
     }
     
     private void refreshTable() {
-        // Refresh table data without affecting layout
+        // Refresh table data synchronously to prevent any layout shifts
+        // Do NOT use invokeLater here - it causes temporary layout shifts
         refreshTableData();
-        showMessage("Đã làm mới danh sách!", true);
         
-        // Ensure right panel maintains its size - no need to revalidate
-        // The size constraints are already set in createRightPanel()
-        if (rightPanel != null) {
-            SwingUtilities.invokeLater(() -> {
-                // Just ensure size constraints are maintained, no revalidate needed
-                rightPanel.setPreferredSize(new Dimension(340, 0));
-                rightPanel.setMaximumSize(new Dimension(340, Integer.MAX_VALUE));
-            });
+        // Show message but ensure it doesn't affect layout
+        showMessageSync("Đã làm mới danh sách!", true);
+    }
+    
+    /**
+     * Show message synchronously without causing layout shifts
+     */
+    private void showMessageSync(String text, boolean isSuccess) {
+        messageLabel.setText(text);
+        if (isSuccess) {
+            messagePanel.setBackground(new Color(240, 253, 244));
+            messagePanel.setBorder(BorderFactory.createCompoundBorder(
+                new RoundedBorder(new Color(187, 247, 208), 1, 8),
+                new EmptyBorder(5, 12, 5, 12)
+            ));
+            messageLabel.setForeground(new Color(22, 101, 52));
+        } else {
+            messagePanel.setBackground(new Color(254, 242, 242));
+            messagePanel.setBorder(BorderFactory.createCompoundBorder(
+                new RoundedBorder(new Color(254, 202, 202), 1, 8),
+                new EmptyBorder(5, 12, 5, 12)
+            ));
+            messageLabel.setForeground(new Color(153, 27, 27));
         }
+        
+        // Always maintain fixed size - even when showing/hiding
+        messagePanel.setPreferredSize(new Dimension(Integer.MAX_VALUE, 48));
+        messagePanel.setMinimumSize(new Dimension(0, 48));
+        messagePanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
+        
+        boolean wasVisible = messagePanel.isVisible();
+        messagePanel.setVisible(true);
+        
+        // Only repaint, never revalidate
+        if (!wasVisible) {
+            messagePanel.repaint();
+        }
+        
+        // Auto hide after 3 seconds
+        Timer timer = new Timer(3000, e -> {
+            messagePanel.setVisible(false);
+            // Maintain size even when hidden
+            messagePanel.setPreferredSize(new Dimension(Integer.MAX_VALUE, 48));
+            messagePanel.repaint();
+        });
+        timer.setRepeats(false);
+        timer.start();
     }
     
     private JPanel createRightPanel() {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBackground(AppConstants.BACKGROUND);
-        // Set fixed preferred size to prevent layout shifts
+        // Set fixed size constraints - width must be exactly 340
         panel.setPreferredSize(new Dimension(340, 0));
-        panel.setMinimumSize(new Dimension(300, 400));
+        panel.setMinimumSize(new Dimension(340, 400));
         panel.setMaximumSize(new Dimension(340, Integer.MAX_VALUE));
+        // Force the panel to maintain its width
+        panel.setAlignmentX(Component.LEFT_ALIGNMENT);
         
         panel.add(createBorrowSection());
         panel.add(Box.createVerticalStrut(20));
@@ -406,8 +462,14 @@ public class BorrowedBooksPage extends JPanel {
             new RoundedBorder(new Color(187, 247, 208), 1, 8),
             new EmptyBorder(5, 12, 5, 12)
         ));
+        // CRITICAL: Set fixed size ALWAYS - even when hidden to prevent layout shifts
+        messagePanel.setPreferredSize(new Dimension(Integer.MAX_VALUE, 48));
+        messagePanel.setMinimumSize(new Dimension(0, 48));
         messagePanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
+        // Keep it invisible but maintain size
         messagePanel.setVisible(false);
+        // Ensure it doesn't collapse when hidden
+        messagePanel.setOpaque(false);
         
         messageLabel = new JLabel("");
         messageLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));
@@ -579,13 +641,17 @@ public class BorrowedBooksPage extends JPanel {
                 messageLabel.setForeground(new Color(153, 27, 27));
             }
             
-            // Revalidate and repaint only if visibility changes
-            // Only revalidate messagePanel itself, not parent panels
+            // Always maintain fixed size to prevent layout shifts
+            messagePanel.setPreferredSize(new Dimension(Integer.MAX_VALUE, 48));
+            messagePanel.setMinimumSize(new Dimension(0, 48));
+            messagePanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
+            
+            // Change visibility without triggering layout recalculation
             boolean wasVisible = messagePanel.isVisible();
             messagePanel.setVisible(true);
             
+            // Only repaint, never revalidate to prevent layout shifts
             if (!wasVisible) {
-                // Only repaint messagePanel, avoid revalidate to prevent layout shift
                 messagePanel.repaint();
             }
             
@@ -593,7 +659,8 @@ public class BorrowedBooksPage extends JPanel {
             Timer timer = new Timer(3000, e -> {
                 SwingUtilities.invokeLater(() -> {
                     messagePanel.setVisible(false);
-                    // Only repaint, don't revalidate to prevent layout shift
+                    // Maintain size even when hidden to prevent layout shift
+                    messagePanel.setPreferredSize(new Dimension(Integer.MAX_VALUE, 48));
                     messagePanel.repaint();
                 });
             });
