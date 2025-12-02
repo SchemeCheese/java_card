@@ -7,12 +7,16 @@ import ui.RoundedBorder;
 
 import javax.swing.*;
 import javax.swing.border.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.table.*;
 import java.awt.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * Settings Page - Quản trị hệ thống
@@ -178,6 +182,21 @@ public class SettingsPage extends JPanel {
         // Student ID
         panel.add(createFieldLabel("Mã Số Sinh Viên"));
         txtStudentId = createTextField("Nhập MSSV");
+        // Add listener to auto-fill email and department when student ID is entered
+        txtStudentId.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                SwingUtilities.invokeLater(() -> handleStudentIdChange());
+            }
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                SwingUtilities.invokeLater(() -> handleStudentIdChange());
+            }
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                SwingUtilities.invokeLater(() -> handleStudentIdChange());
+            }
+        });
         panel.add(txtStudentId);
         
         // Name
@@ -198,6 +217,26 @@ public class SettingsPage extends JPanel {
         // Birth Date
         panel.add(createFieldLabel("Ngày Sinh"));
         txtBirthDate = createTextField("DD/MM/YYYY");
+        // Add auto-format and validation for date format
+        txtBirthDate.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                SwingUtilities.invokeLater(() -> formatBirthDate());
+            }
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                SwingUtilities.invokeLater(() -> formatBirthDate());
+            }
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                SwingUtilities.invokeLater(() -> formatBirthDate());
+            }
+        });
+        txtBirthDate.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusLost(java.awt.event.FocusEvent e) {
+                validateBirthDate();
+            }
+        });
         panel.add(txtBirthDate);
         
         // Address
@@ -241,6 +280,15 @@ public class SettingsPage extends JPanel {
             JOptionPane.showMessageDialog(this,
                 "Vui lòng nhập MSSV và Họ tên!",
                 "Thiếu thông tin", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        // Validate ngày sinh
+        if (!birthDate.isEmpty() && !validateBirthDate()) {
+            JOptionPane.showMessageDialog(this,
+                "Ngày sinh không hợp lệ! Vui lòng nhập theo định dạng DD/MM/YYYY và đảm bảo ngày hợp lệ.",
+                "Lỗi định dạng", JOptionPane.WARNING_MESSAGE);
+            txtBirthDate.requestFocus();
             return;
         }
         
@@ -300,6 +348,226 @@ public class SettingsPage extends JPanel {
             return "";
         }
         return value;
+    }
+    
+    /**
+     * Xác định khoa/viện dựa trên 2 ký tự đầu của MSSV
+     * CT → CNTT, DT → DTTT, AT → ATTT
+     */
+    private String getDepartmentFromStudentId(String studentId) {
+        if (studentId == null || studentId.length() < 2) {
+            return "";
+        }
+        
+        String prefix = studentId.substring(0, 2).toUpperCase();
+        switch (prefix) {
+            case "CT":
+                return "CNTT";
+            case "DT":
+                return "DTTT";
+            case "AT":
+                return "ATTT";
+            default:
+                return "";
+        }
+    }
+    
+    /**
+     * Tự động điền email và khoa khi nhập mã sinh viên
+     */
+    private void handleStudentIdChange() {
+        String studentId = txtStudentId.getText().trim();
+        String placeholder = "Nhập MSSV";
+        
+        // Chỉ tự động điền khi người dùng đã nhập và không phải placeholder
+        if (!studentId.isEmpty() && !studentId.equals(placeholder)) {
+            // Tự động điền email: MSSV + @actvn.edu.vn
+            String emailPlaceholder = "email@example.com";
+            String currentEmail = txtEmail.getText().trim();
+            
+            // Kiểm tra nếu email đang là placeholder, rỗng, hoặc là email tự động từ MSSV trước đó
+            // Nếu email kết thúc bằng @actvn.edu.vn, có thể là email tự động nên cần cập nhật
+            boolean isAutoEmail = currentEmail.endsWith("@actvn.edu.vn");
+            boolean shouldUpdateEmail = currentEmail.isEmpty() || 
+                                       currentEmail.equals(emailPlaceholder) ||
+                                       isAutoEmail;
+            
+            if (shouldUpdateEmail) {
+                String autoEmail = studentId + "@actvn.edu.vn";
+                // Chỉ cập nhật nếu khác với giá trị hiện tại để tránh flickering
+                if (!autoEmail.equals(currentEmail)) {
+                    txtEmail.setText(autoEmail);
+                    txtEmail.setForeground(AppConstants.TEXT_PRIMARY);
+                }
+            }
+            
+            // Tự động điền khoa dựa trên 2 ký tự đầu của MSSV
+            String deptPlaceholder = "Nhập khoa / viện";
+            String currentDept = txtDepartment.getText().trim();
+            
+            // Chỉ tự động điền nếu khoa đang là placeholder hoặc rỗng
+            if (currentDept.isEmpty() || currentDept.equals(deptPlaceholder)) {
+                String department = getDepartmentFromStudentId(studentId);
+                if (!department.isEmpty()) {
+                    txtDepartment.setText(department);
+                    txtDepartment.setForeground(AppConstants.TEXT_PRIMARY);
+                }
+            } else {
+                // Nếu khoa đã được điền, kiểm tra xem có phải là khoa tự động không
+                // Nếu là khoa tự động từ MSSV trước đó, cập nhật lại
+                String expectedDept = getDepartmentFromStudentId(studentId);
+                if (!expectedDept.isEmpty() && 
+                    (currentDept.equals("CNTT") || currentDept.equals("DTTT") || currentDept.equals("ATTT"))) {
+                    txtDepartment.setText(expectedDept);
+                    txtDepartment.setForeground(AppConstants.TEXT_PRIMARY);
+                }
+            }
+        } else {
+            // Nếu MSSV bị xóa, có thể reset email về placeholder nếu là email tự động
+            String currentEmail = txtEmail.getText().trim();
+            if (currentEmail.endsWith("@actvn.edu.vn")) {
+                txtEmail.setText("email@example.com");
+                txtEmail.setForeground(Color.GRAY);
+            }
+        }
+    }
+    
+    /**
+     * Tự động format ngày sinh khi người dùng nhập (DD/MM/YYYY)
+     * Tự động thêm dấu "/" sau 2 số đầu và sau 2 số tiếp theo
+     */
+    private void formatBirthDate() {
+        String text = txtBirthDate.getText();
+        String placeholder = "DD/MM/YYYY";
+        
+        // Bỏ qua nếu là placeholder hoặc đang focus và là placeholder
+        if (text.equals(placeholder) || text.isEmpty()) {
+            return;
+        }
+        
+        // Lấy vị trí cursor hiện tại
+        int caretPosition = txtBirthDate.getCaretPosition();
+        
+        // Loại bỏ tất cả ký tự không phải số
+        String digitsOnly = text.replaceAll("[^0-9]", "");
+        
+        // Giới hạn tối đa 8 chữ số (DDMMYYYY)
+        if (digitsOnly.length() > 8) {
+            digitsOnly = digitsOnly.substring(0, 8);
+        }
+        
+        // Format: DD/MM/YYYY
+        StringBuilder formatted = new StringBuilder();
+        for (int i = 0; i < digitsOnly.length(); i++) {
+            if (i == 2 || i == 4) {
+                formatted.append("/");
+            }
+            formatted.append(digitsOnly.charAt(i));
+        }
+        
+        // Chỉ cập nhật nếu khác với giá trị hiện tại để tránh vòng lặp vô hạn
+        String newText = formatted.toString();
+        if (!newText.equals(text)) {
+            // Lưu vị trí cursor
+            int newCaretPos = caretPosition;
+            
+            // Điều chỉnh vị trí cursor sau khi format
+            if (newText.length() > text.length()) {
+                // Nếu text dài hơn, cursor sẽ di chuyển theo số lượng dấu "/" được thêm
+                int slashesAdded = countOccurrences(newText, '/') - countOccurrences(text, '/');
+                newCaretPos += slashesAdded;
+            } else if (newText.length() < text.length()) {
+                // Nếu text ngắn hơn, điều chỉnh cursor
+                newCaretPos = Math.min(newCaretPos, newText.length());
+            }
+            
+            txtBirthDate.setText(newText);
+            txtBirthDate.setForeground(AppConstants.TEXT_PRIMARY);
+            
+            // Khôi phục vị trí cursor
+            if (newCaretPos >= 0 && newCaretPos <= newText.length()) {
+                txtBirthDate.setCaretPosition(newCaretPos);
+            }
+        }
+    }
+    
+    /**
+     * Đếm số lần xuất hiện của ký tự trong chuỗi
+     */
+    private int countOccurrences(String str, char ch) {
+        int count = 0;
+        for (int i = 0; i < str.length(); i++) {
+            if (str.charAt(i) == ch) {
+                count++;
+            }
+        }
+        return count;
+    }
+    
+    /**
+     * Validate định dạng ngày sinh (DD/MM/YYYY)
+     */
+    private boolean validateBirthDate() {
+        String birthDate = txtBirthDate.getText().trim();
+        String placeholder = "DD/MM/YYYY";
+        
+        // Bỏ qua nếu là placeholder hoặc rỗng
+        if (birthDate.isEmpty() || birthDate.equals(placeholder)) {
+            return true;
+        }
+        
+        // Kiểm tra định dạng DD/MM/YYYY
+        Pattern datePattern = Pattern.compile("^\\d{2}/\\d{2}/\\d{4}$");
+        if (!datePattern.matcher(birthDate).matches()) {
+            txtBirthDate.setBorder(BorderFactory.createCompoundBorder(
+                new RoundedBorder(Color.RED, 2, 6),
+                new EmptyBorder(6, 10, 6, 10)
+            ));
+            txtBirthDate.setToolTipText("Định dạng không hợp lệ! Vui lòng nhập theo định dạng DD/MM/YYYY");
+            return false;
+        }
+        
+        // Kiểm tra tính hợp lệ của ngày
+        try {
+            String[] parts = birthDate.split("/");
+            int day = Integer.parseInt(parts[0]);
+            int month = Integer.parseInt(parts[1]);
+            int year = Integer.parseInt(parts[2]);
+            
+            // Kiểm tra phạm vi hợp lệ
+            if (day < 1 || day > 31 || month < 1 || month > 12 || year < 1900 || year > LocalDate.now().getYear()) {
+                throw new IllegalArgumentException("Ngày không hợp lệ");
+            }
+            
+            // Kiểm tra ngày có tồn tại không (ví dụ: 31/02/2000)
+            LocalDate date = LocalDate.of(year, month, day);
+            
+            // Kiểm tra ngày không được trong tương lai
+            if (date.isAfter(LocalDate.now())) {
+                txtBirthDate.setBorder(BorderFactory.createCompoundBorder(
+                    new RoundedBorder(Color.RED, 2, 6),
+                    new EmptyBorder(6, 10, 6, 10)
+                ));
+                txtBirthDate.setToolTipText("Ngày sinh không được là ngày trong tương lai!");
+                return false;
+            }
+            
+            // Ngày hợp lệ - khôi phục border mặc định
+            txtBirthDate.setBorder(BorderFactory.createCompoundBorder(
+                new RoundedBorder(AppConstants.BORDER_COLOR, 1, 6),
+                new EmptyBorder(6, 10, 6, 10)
+            ));
+            txtBirthDate.setToolTipText(null);
+            return true;
+            
+        } catch (Exception e) {
+            txtBirthDate.setBorder(BorderFactory.createCompoundBorder(
+                new RoundedBorder(Color.RED, 2, 6),
+                new EmptyBorder(6, 10, 6, 10)
+            ));
+            txtBirthDate.setToolTipText("Ngày không hợp lệ! Vui lòng kiểm tra lại.");
+            return false;
+        }
     }
     
     private void clearForm() {
