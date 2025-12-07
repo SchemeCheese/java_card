@@ -15,6 +15,7 @@ public class CardInfo {
     private int borrowedBooks;     // Số sách đang mượn
     private String pin;            // Mã PIN của sinh viên
     private long balance;          // Số dư tài khoản
+    private String imagePath;      // Đường dẫn đến ảnh đại diện
 
     public CardInfo() {
         this.studentId = "";
@@ -27,6 +28,7 @@ public class CardInfo {
         this.borrowedBooks = 0;
         this.pin = "000000";  // PIN mặc định
         this.balance = 0;
+        this.imagePath = "";
     }
 
     public CardInfo(String studentId, String holderName, String email, 
@@ -41,6 +43,7 @@ public class CardInfo {
         this.borrowedBooks = 0;
         this.pin = "000000";  // PIN mặc định
         this.balance = 0;
+        this.imagePath = "";
     }
 
     // Getters and Setters
@@ -122,6 +125,14 @@ public class CardInfo {
 
     public void setBalance(long balance) {
         this.balance = balance;
+    }
+
+    public String getImagePath() {
+        return imagePath;
+    }
+
+    public void setImagePath(String imagePath) {
+        this.imagePath = imagePath;
     }
 
     public boolean isInitialized() {

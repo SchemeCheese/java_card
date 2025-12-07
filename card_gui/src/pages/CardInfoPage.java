@@ -9,7 +9,10 @@ import javax.swing.*;
 import javax.swing.border.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.File;
 import java.time.LocalDate;
 import java.util.regex.Pattern;
 
@@ -26,6 +29,10 @@ public class CardInfoPage extends JPanel {
     private JTextField txtHolderName;
     private JTextField txtBirthDate;
     private JTextField txtAddress;
+    
+    // Avatar components
+    private JLabel avatarLabel;
+    private ImageIcon currentImageIcon;
     
     public CardInfoPage(SimulatorService simulatorService) {
         this.simulatorService = simulatorService;
@@ -140,9 +147,18 @@ public class CardInfoPage extends JPanel {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBackground(Color.WHITE);
         
-        // Avatar with green border
-        String holderName = cardInfo != null ? cardInfo.getHolderName() : "";
-        JPanel avatarBox = new JPanel() {
+        // Avatar container with image or initial
+        String imagePath = cardInfo != null && cardInfo.getImagePath() != null ? cardInfo.getImagePath() : "";
+        
+        JPanel avatarBox = new JPanel(new BorderLayout());
+        avatarBox.setPreferredSize(new Dimension(160, 170));
+        avatarBox.setMaximumSize(new Dimension(160, 170));
+        avatarBox.setBorder(BorderFactory.createLineBorder(AppConstants.SUCCESS_COLOR, 3));
+        avatarBox.setAlignmentX(Component.CENTER_ALIGNMENT);
+        avatarBox.setBackground(new Color(243, 244, 246));
+        
+        // Avatar label to display image or initial
+        avatarLabel = new JLabel() {
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
@@ -152,32 +168,94 @@ public class CardInfoPage extends JPanel {
                 int w = getWidth();
                 int h = getHeight();
                 
-                // Background
+                // Draw background
                 g2.setColor(new Color(243, 244, 246));
                 g2.fillRoundRect(0, 0, w, h, 12, 12);
                 
-                // Vẽ chữ cái đầu tên
-                g2.setColor(AppConstants.PRIMARY_COLOR);
-                g2.setFont(new Font("Segoe UI", Font.BOLD, 60));
-                String initial = "";
-                if (holderName.contains(" ")) {
-                    String[] parts = holderName.split(" ");
-                    initial = parts[parts.length - 1].substring(0, 1).toUpperCase();
-                } else if (!holderName.isEmpty()) {
-                    initial = holderName.substring(0, 1).toUpperCase();
+                // If image exists, draw it
+                if (currentImageIcon != null && currentImageIcon.getImage() != null) {
+                    Image img = currentImageIcon.getImage();
+                    int imgW = img.getWidth(null);
+                    int imgH = img.getHeight(null);
+                    
+                    // Calculate scaling to fit while maintaining aspect ratio
+                    double scale = Math.min((double)w / imgW, (double)h / imgH);
+                    int scaledW = (int)(imgW * scale);
+                    int scaledH = (int)(imgH * scale);
+                    int x = (w - scaledW) / 2;
+                    int y = (h - scaledH) / 2;
+                    
+                    g2.drawImage(img, x, y, scaledW, scaledH, null);
+                } else {
+                    // Draw initial letter - get current holder name from cardInfo
+                    String holderName = cardInfo != null ? cardInfo.getHolderName() : "";
+                    g2.setColor(AppConstants.PRIMARY_COLOR);
+                    g2.setFont(new Font("Segoe UI", Font.BOLD, 60));
+                    String initial = "";
+                    if (holderName != null && !holderName.isEmpty()) {
+                        if (holderName.contains(" ")) {
+                            String[] parts = holderName.split(" ");
+                            if (parts.length > 0 && !parts[parts.length - 1].isEmpty()) {
+                                initial = parts[parts.length - 1].substring(0, 1).toUpperCase();
+                            }
+                        } else {
+                            initial = holderName.substring(0, 1).toUpperCase();
+                        }
+                    }
+                    if (!initial.isEmpty()) {
+                        FontMetrics fm = g2.getFontMetrics();
+                        int x = (w - fm.stringWidth(initial)) / 2;
+                        int y = ((h - fm.getHeight()) / 2) + fm.getAscent();
+                        g2.drawString(initial, x, y);
+                    }
                 }
-                FontMetrics fm = g2.getFontMetrics();
-                int x = (w - fm.stringWidth(initial)) / 2;
-                int y = ((h - fm.getHeight()) / 2) + fm.getAscent();
-                g2.drawString(initial, x, y);
                 
                 g2.dispose();
             }
         };
-        avatarBox.setPreferredSize(new Dimension(160, 170));
-        avatarBox.setMaximumSize(new Dimension(160, 170));
-        avatarBox.setBorder(BorderFactory.createLineBorder(AppConstants.SUCCESS_COLOR, 3));
-        avatarBox.setAlignmentX(Component.CENTER_ALIGNMENT);
+        avatarLabel.setPreferredSize(new Dimension(160, 170));
+        avatarLabel.setOpaque(false);
+        
+        // Load image if path exists
+        if (imagePath != null && !imagePath.isEmpty()) {
+            loadImage(imagePath);
+        }
+        
+        avatarBox.add(avatarLabel, BorderLayout.CENTER);
+        
+        // Upload/Change image button
+        JButton uploadBtn = new JButton("Đổi ảnh") {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(getBackground());
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 6, 6);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+        };
+        uploadBtn.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        uploadBtn.setForeground(Color.WHITE);
+        uploadBtn.setBackground(AppConstants.PRIMARY_COLOR);
+        uploadBtn.setPreferredSize(new Dimension(140, 32));
+        uploadBtn.setBorder(new EmptyBorder(6, 12, 6, 12));
+        uploadBtn.setFocusPainted(false);
+        uploadBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        uploadBtn.setContentAreaFilled(false);
+        uploadBtn.setOpaque(false);
+        uploadBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
+        uploadBtn.addActionListener(e -> handleUploadImage());
+        
+        Color originalBtnColor = AppConstants.PRIMARY_COLOR;
+        uploadBtn.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                uploadBtn.setBackground(originalBtnColor.darker());
+            }
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                uploadBtn.setBackground(originalBtnColor);
+            }
+        });
         
         // ID
         String studentId = cardInfo != null ? cardInfo.getStudentId() : "N/A";
@@ -203,11 +281,126 @@ public class CardInfoPage extends JPanel {
         balanceLabel.setBorder(new EmptyBorder(5, 0, 0, 0));
         
         panel.add(avatarBox);
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(uploadBtn);
+        panel.add(Box.createVerticalStrut(5));
         panel.add(idLabel);
         panel.add(statusLabel);
         panel.add(balanceLabel);
         
         return panel;
+    }
+    
+    /**
+     * Xử lý upload/đổi ảnh
+     */
+    private void handleUploadImage() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setDialogTitle("Chọn ảnh đại diện");
+        fileChooser.setFileFilter(new FileNameExtensionFilter(
+            "Ảnh (JPG, PNG, GIF)", "jpg", "jpeg", "png", "gif"));
+        fileChooser.setAcceptAllFileFilterUsed(false);
+        
+        int result = fileChooser.showOpenDialog(this);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File selectedFile = fileChooser.getSelectedFile();
+            String filePath = selectedFile.getAbsolutePath();
+            
+            // Load and display image
+            if (loadImage(filePath)) {
+                // Save path to cardInfo
+                if (cardInfo != null) {
+                    cardInfo.setImagePath(filePath);
+                    
+                    // Update in service
+                    try {
+                        String studentCode = simulatorService.getCurrentStudentCode();
+                        if (simulatorService.isConnected() && simulatorService.isPinVerified()) {
+                            simulatorService.setCardInfo(cardInfo);
+                        } else {
+                            simulatorService.addCardToList(cardInfo);
+                        }
+                        
+                        JOptionPane.showMessageDialog(this,
+                            "Đã cập nhật ảnh đại diện thành công!",
+                            "Thành công", JOptionPane.INFORMATION_MESSAGE);
+                    } catch (Exception ex) {
+                        JOptionPane.showMessageDialog(this,
+                            "Lỗi khi lưu ảnh: " + ex.getMessage(),
+                            "Lỗi", JOptionPane.ERROR_MESSAGE);
+                        ex.printStackTrace();
+                    }
+                }
+            } else {
+                JOptionPane.showMessageDialog(this,
+                    "Không thể tải ảnh! Vui lòng chọn file ảnh hợp lệ.",
+                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+    
+    /**
+     * Load image from file path
+     */
+    private boolean loadImage(String imagePath) {
+        if (imagePath == null || imagePath.isEmpty()) {
+            currentImageIcon = null;
+            if (avatarLabel != null) {
+                avatarLabel.repaint();
+            }
+            return false;
+        }
+        
+        try {
+            File imageFile = new File(imagePath);
+            if (!imageFile.exists()) {
+                currentImageIcon = null;
+                if (avatarLabel != null) {
+                    avatarLabel.repaint();
+                }
+                return false;
+            }
+            
+            ImageIcon icon = new ImageIcon(imagePath);
+            Image image = icon.getImage();
+            
+            // Scale image to fit avatar size (160x170)
+            int targetWidth = 160;
+            int targetHeight = 170;
+            
+            int imgWidth = image.getWidth(null);
+            int imgHeight = image.getHeight(null);
+            
+            if (imgWidth > 0 && imgHeight > 0) {
+                double scale = Math.min((double)targetWidth / imgWidth, (double)targetHeight / imgHeight);
+                int scaledWidth = (int)(imgWidth * scale);
+                int scaledHeight = (int)(imgHeight * scale);
+                
+                // Create scaled image
+                BufferedImage scaledImage = new BufferedImage(scaledWidth, scaledHeight, BufferedImage.TYPE_INT_RGB);
+                Graphics2D g2 = scaledImage.createGraphics();
+                g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                g2.drawImage(image, 0, 0, scaledWidth, scaledHeight, null);
+                g2.dispose();
+                
+                currentImageIcon = new ImageIcon(scaledImage);
+            } else {
+                currentImageIcon = icon;
+            }
+            
+            if (avatarLabel != null) {
+                avatarLabel.repaint();
+            }
+            
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            currentImageIcon = null;
+            if (avatarLabel != null) {
+                avatarLabel.repaint();
+            }
+            return false;
+        }
     }
     
     private JPanel createInfoSection() {
@@ -549,6 +742,7 @@ public class CardInfoPage extends JPanel {
         if (!address.isEmpty()) {
             cardInfo.setAddress(address);
         }
+        // Image path is already saved when uploaded, no need to update here
         
         // Save to service
         try {
@@ -556,6 +750,10 @@ public class CardInfoPage extends JPanel {
             if (simulatorService.isConnected() && simulatorService.isPinVerified()) {
                 boolean saved = simulatorService.setCardInfo(cardInfo);
                 if (saved) {
+                    // Refresh avatar display
+                    if (avatarLabel != null) {
+                        avatarLabel.repaint();
+                    }
                     JOptionPane.showMessageDialog(this,
                         "Đã lưu thông tin thành công!",
                         "Thành công", JOptionPane.INFORMATION_MESSAGE);
@@ -567,6 +765,10 @@ public class CardInfoPage extends JPanel {
             } else {
                 // Update in-memory only
                 simulatorService.addCardToList(cardInfo);
+                // Refresh avatar display
+                if (avatarLabel != null) {
+                    avatarLabel.repaint();
+                }
                 JOptionPane.showMessageDialog(this,
                     "Đã cập nhật thông tin (chế độ demo)!\n" +
                     "Lưu ý: Để lưu vào thẻ thật, vui lòng xác thực PIN trước.",
