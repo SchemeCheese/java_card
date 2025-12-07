@@ -16,7 +16,11 @@ public class CardInfo {
     private int borrowedBooks;     // Số sách đang mượn
     private String pin;            // Mã PIN của sinh viên
     private long balance;          // Số dư tài khoản
+<<<<<<< HEAD
     private int pinRetryCount;
+=======
+    private String imagePath;      // Đường dẫn đến ảnh đại diện
+>>>>>>> 25e9cd7 (Add avatar image upload to CardInfo and CardInfoPage)
 
     public CardInfo() {
         this.studentId = "";
@@ -29,7 +33,11 @@ public class CardInfo {
         this.borrowedBooks = 0;
         this.pin = "000000";  // PIN mặc định
         this.balance = 0;
+<<<<<<< HEAD
         this.pinRetryCount = 3;
+=======
+        this.imagePath = "";
+>>>>>>> 25e9cd7 (Add avatar image upload to CardInfo and CardInfoPage)
     }
 
     public CardInfo(String studentId, String holderName, String email,
@@ -44,7 +52,11 @@ public class CardInfo {
         this.borrowedBooks = 0;
         this.pin = "000000";  // PIN mặc định
         this.balance = 0;
+<<<<<<< HEAD
         this.pinRetryCount = 3;
+=======
+        this.imagePath = "";
+>>>>>>> 25e9cd7 (Add avatar image upload to CardInfo and CardInfoPage)
     }
 
     // Getters and Setters
@@ -128,12 +140,21 @@ public class CardInfo {
         this.balance = balance;
     }
 
+<<<<<<< HEAD
     public int getPinRetryCount() {
         return pinRetryCount;
     }
 
     public void setPinRetryCount(int pinRetryCount) {
         this.pinRetryCount = pinRetryCount;
+=======
+    public String getImagePath() {
+        return imagePath;
+    }
+
+    public void setImagePath(String imagePath) {
+        this.imagePath = imagePath;
+>>>>>>> 25e9cd7 (Add avatar image upload to CardInfo and CardInfoPage)
     }
 
     public boolean isInitialized() {
