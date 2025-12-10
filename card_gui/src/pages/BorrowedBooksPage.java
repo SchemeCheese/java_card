@@ -30,6 +30,9 @@ public class BorrowedBooksPage extends JPanel {
     private JLabel messageLabel;
     private JTextField borrowField;
     private JTextField returnField;
+    private JPanel rightPanel;
+    private JPanel leftPanel;
+    private JPanel mainPanel;
     
     // Mock data cho thư viện sách
     private static final Map<String, String> BOOK_CATALOG = new HashMap<>();
@@ -57,16 +60,27 @@ public class BorrowedBooksPage extends JPanel {
         setBackground(AppConstants.BACKGROUND);
         setBorder(new EmptyBorder(30, 40, 30, 40));
         
-        JPanel mainPanel = new JPanel(new BorderLayout(25, 0));
+        mainPanel = new JPanel(new BorderLayout(25, 0));
         mainPanel.setBackground(AppConstants.BACKGROUND);
         
-        JPanel leftPanel = createLeftPanel();
-        JPanel rightPanel = createRightPanel();
-        rightPanel.setPreferredSize(new Dimension(340, 0));
-        rightPanel.setMinimumSize(new Dimension(300, 400));
+        leftPanel = createLeftPanel();
+        rightPanel = createRightPanel();
+        
+        // Wrap rightPanel in a fixed-size container to prevent ANY layout shifts
+        JPanel rightPanelWrapper = new JPanel(new BorderLayout());
+        rightPanelWrapper.setBackground(AppConstants.BACKGROUND);
+        // CRITICAL: Set all size constraints to exactly 340px width - no flexibility
+        rightPanelWrapper.setPreferredSize(new Dimension(340, Integer.MAX_VALUE));
+        rightPanelWrapper.setMinimumSize(new Dimension(340, 400));
+        rightPanelWrapper.setMaximumSize(new Dimension(340, Integer.MAX_VALUE));
+        rightPanelWrapper.add(rightPanel, BorderLayout.CENTER);
+        
+        // Set fixed size constraints for left panel
+        leftPanel.setPreferredSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+        leftPanel.setMinimumSize(new Dimension(500, 400));
         
         mainPanel.add(leftPanel, BorderLayout.CENTER);
-        mainPanel.add(rightPanel, BorderLayout.EAST);
+        mainPanel.add(rightPanelWrapper, BorderLayout.EAST);
         
         add(mainPanel, BorderLayout.CENTER);
     }
@@ -90,6 +104,9 @@ public class BorrowedBooksPage extends JPanel {
             new RoundedBorder(AppConstants.BORDER_COLOR, 1, 16),
             new EmptyBorder(30, 35, 30, 35)
         ));
+        // Set fixed size constraints to prevent layout shifts
+        panel.setPreferredSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+        panel.setMinimumSize(new Dimension(500, 400));
         
         JPanel headerSection = new JPanel();
         headerSection.setLayout(new BoxLayout(headerSection, BoxLayout.Y_AXIS));
@@ -234,6 +251,8 @@ public class BorrowedBooksPage extends JPanel {
         JScrollPane scrollPane = new JScrollPane(table);
         scrollPane.setBorder(BorderFactory.createLineBorder(AppConstants.BORDER_COLOR));
         scrollPane.getViewport().setBackground(Color.WHITE);
+        // Set fixed preferred size to prevent layout shifts
+        scrollPane.setPreferredSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
         
         panel.add(scrollPane, BorderLayout.CENTER);
         
@@ -241,28 +260,98 @@ public class BorrowedBooksPage extends JPanel {
     }
     
     private void refreshTableData() {
+        // Disable table updates temporarily to prevent flickering
         tableModel.setRowCount(0);
-        for (BorrowedBook book : borrowedBooks) {
-            tableModel.addRow(new Object[]{
+        
+        // Add rows in batch
+        Object[][] rowData = new Object[borrowedBooks.size()][6];
+        for (int i = 0; i < borrowedBooks.size(); i++) {
+            BorrowedBook book = borrowedBooks.get(i);
+            rowData[i] = new Object[]{
                 book.getBookId(),
                 book.getBookName(),
                 book.getBorrowDate(),
                 book.getDueDate(),
                 book.getStatus(),
                 book.getOverdueDays()
-            });
+            };
+        }
+        
+        // Add all rows at once
+        for (Object[] row : rowData) {
+            tableModel.addRow(row);
+        }
+        
+        // Only repaint table, do NOT revalidate to prevent layout shifts
+        if (table != null) {
+            table.repaint();
         }
     }
     
     private void refreshTable() {
+        // Refresh table data synchronously to prevent any layout shifts
+        // Do NOT use invokeLater here - it causes temporary layout shifts
         refreshTableData();
-        showMessage("Đã làm mới danh sách!", true);
+        
+        // Show message but ensure it doesn't affect layout
+        showMessageSync("Đã làm mới danh sách!", true);
+    }
+    
+    /**
+     * Show message synchronously without causing layout shifts
+     */
+    private void showMessageSync(String text, boolean isSuccess) {
+        messageLabel.setText(text);
+        if (isSuccess) {
+            messagePanel.setBackground(new Color(240, 253, 244));
+            messagePanel.setBorder(BorderFactory.createCompoundBorder(
+                new RoundedBorder(new Color(187, 247, 208), 1, 8),
+                new EmptyBorder(5, 12, 5, 12)
+            ));
+            messageLabel.setForeground(new Color(22, 101, 52));
+        } else {
+            messagePanel.setBackground(new Color(254, 242, 242));
+            messagePanel.setBorder(BorderFactory.createCompoundBorder(
+                new RoundedBorder(new Color(254, 202, 202), 1, 8),
+                new EmptyBorder(5, 12, 5, 12)
+            ));
+            messageLabel.setForeground(new Color(153, 27, 27));
+        }
+        
+        // Always maintain fixed size - even when showing/hiding
+        messagePanel.setPreferredSize(new Dimension(Integer.MAX_VALUE, 48));
+        messagePanel.setMinimumSize(new Dimension(0, 48));
+        messagePanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
+        
+        boolean wasVisible = messagePanel.isVisible();
+        messagePanel.setVisible(true);
+        
+        // Only repaint, never revalidate
+        if (!wasVisible) {
+            messagePanel.repaint();
+        }
+        
+        // Auto hide after 3 seconds
+        Timer timer = new Timer(3000, e -> {
+            messagePanel.setVisible(false);
+            // Maintain size even when hidden
+            messagePanel.setPreferredSize(new Dimension(Integer.MAX_VALUE, 48));
+            messagePanel.repaint();
+        });
+        timer.setRepeats(false);
+        timer.start();
     }
     
     private JPanel createRightPanel() {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBackground(AppConstants.BACKGROUND);
+        // Set fixed size constraints - width must be exactly 340
+        panel.setPreferredSize(new Dimension(340, 0));
+        panel.setMinimumSize(new Dimension(340, 400));
+        panel.setMaximumSize(new Dimension(340, Integer.MAX_VALUE));
+        // Force the panel to maintain its width
+        panel.setAlignmentX(Component.LEFT_ALIGNMENT);
         
         panel.add(createBorrowSection());
         panel.add(Box.createVerticalStrut(20));
@@ -303,7 +392,14 @@ public class BorrowedBooksPage extends JPanel {
         JButton borrowBtn = createButton("(+) Mượn Sách", AppConstants.SUCCESS_COLOR, Color.WHITE, Integer.MAX_VALUE, 44);
         borrowBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
         borrowBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
-        borrowBtn.addActionListener(e -> handleBorrowBook());
+        borrowBtn.addActionListener(e -> {
+            borrowBtn.setEnabled(false);
+            try {
+                handleBorrowBook();
+            } finally {
+                SwingUtilities.invokeLater(() -> borrowBtn.setEnabled(true));
+            }
+        });
         
         panel.add(title);
         panel.add(label);
@@ -341,7 +437,14 @@ public class BorrowedBooksPage extends JPanel {
         JButton returnBtn = createButton("Trả Sách", AppConstants.DANGER_COLOR, Color.WHITE, Integer.MAX_VALUE, 44);
         returnBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
         returnBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
-        returnBtn.addActionListener(e -> handleReturnBook());
+        returnBtn.addActionListener(e -> {
+            returnBtn.setEnabled(false);
+            try {
+                handleReturnBook();
+            } finally {
+                SwingUtilities.invokeLater(() -> returnBtn.setEnabled(true));
+            }
+        });
         
         panel.add(title);
         panel.add(label);
@@ -359,8 +462,14 @@ public class BorrowedBooksPage extends JPanel {
             new RoundedBorder(new Color(187, 247, 208), 1, 8),
             new EmptyBorder(5, 12, 5, 12)
         ));
+        // CRITICAL: Set fixed size ALWAYS - even when hidden to prevent layout shifts
+        messagePanel.setPreferredSize(new Dimension(Integer.MAX_VALUE, 48));
+        messagePanel.setMinimumSize(new Dimension(0, 48));
         messagePanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
+        // Keep it invisible but maintain size
         messagePanel.setVisible(false);
+        // Ensure it doesn't collapse when hidden
+        messagePanel.setOpaque(false);
         
         messageLabel = new JLabel("");
         messageLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));
@@ -445,11 +554,13 @@ public class BorrowedBooksPage extends JPanel {
         String studentCode = simulatorService.getCurrentStudentCode();
         simulatorService.addBorrowedBook(studentCode, newBook);
         
-        // Update UI
-        refreshTableData();
-        borrowField.setText("VD: NV001, HP001...");
-        borrowField.setForeground(Color.GRAY);
-        showMessage("Mượn sách \"" + bookName + "\" thành công!", true);
+        // Update UI on EDT to prevent flickering
+        SwingUtilities.invokeLater(() -> {
+            refreshTableData();
+            borrowField.setText("VD: NV001, HP001...");
+            borrowField.setForeground(Color.GRAY);
+            showMessage("Mượn sách \"" + bookName + "\" thành công!", true);
+        });
     }
     
     private void handleReturnBook() {
@@ -501,36 +612,61 @@ public class BorrowedBooksPage extends JPanel {
         // Update service
         simulatorService.removeBorrowedBook(studentCode, bookId);
 
-        // Update UI
-        refreshTableData();
-        returnField.setText("Nhập mã sách cần trả...");
-        returnField.setForeground(Color.GRAY);
-        showMessage("Trả sách \"" + bookName + "\" thành công!", true);
+        // Update UI on EDT to prevent flickering
+        SwingUtilities.invokeLater(() -> {
+            refreshTableData();
+            returnField.setText("Nhập mã sách cần trả...");
+            returnField.setForeground(Color.GRAY);
+            showMessage("Trả sách \"" + bookName + "\" thành công!", true);
+        });
     }
     
     private void showMessage(String text, boolean isSuccess) {
-        messageLabel.setText(text);
-        if (isSuccess) {
-            messagePanel.setBackground(new Color(240, 253, 244));
-            messagePanel.setBorder(BorderFactory.createCompoundBorder(
-                new RoundedBorder(new Color(187, 247, 208), 1, 8),
-                new EmptyBorder(5, 12, 5, 12)
-            ));
-            messageLabel.setForeground(new Color(22, 101, 52));
-        } else {
-            messagePanel.setBackground(new Color(254, 242, 242));
-            messagePanel.setBorder(BorderFactory.createCompoundBorder(
-                new RoundedBorder(new Color(254, 202, 202), 1, 8),
-                new EmptyBorder(5, 12, 5, 12)
-            ));
-            messageLabel.setForeground(new Color(153, 27, 27));
-        }
-        messagePanel.setVisible(true);
-        
-        // Auto hide after 3 seconds
-        Timer timer = new Timer(3000, e -> messagePanel.setVisible(false));
-        timer.setRepeats(false);
-        timer.start();
+        // Update message on EDT to prevent flickering
+        SwingUtilities.invokeLater(() -> {
+            messageLabel.setText(text);
+            if (isSuccess) {
+                messagePanel.setBackground(new Color(240, 253, 244));
+                messagePanel.setBorder(BorderFactory.createCompoundBorder(
+                    new RoundedBorder(new Color(187, 247, 208), 1, 8),
+                    new EmptyBorder(5, 12, 5, 12)
+                ));
+                messageLabel.setForeground(new Color(22, 101, 52));
+            } else {
+                messagePanel.setBackground(new Color(254, 242, 242));
+                messagePanel.setBorder(BorderFactory.createCompoundBorder(
+                    new RoundedBorder(new Color(254, 202, 202), 1, 8),
+                    new EmptyBorder(5, 12, 5, 12)
+                ));
+                messageLabel.setForeground(new Color(153, 27, 27));
+            }
+            
+            // Always maintain fixed size to prevent layout shifts
+            messagePanel.setPreferredSize(new Dimension(Integer.MAX_VALUE, 48));
+            messagePanel.setMinimumSize(new Dimension(0, 48));
+            messagePanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
+            
+            // Change visibility without triggering layout recalculation
+            boolean wasVisible = messagePanel.isVisible();
+            messagePanel.setVisible(true);
+            
+            // Only repaint, never revalidate to prevent layout shifts
+            if (!wasVisible) {
+                messagePanel.repaint();
+            }
+            
+            // Auto hide after 3 seconds
+            Timer timer = new Timer(3000, e -> {
+                SwingUtilities.invokeLater(() -> {
+                    messagePanel.setVisible(false);
+                    // Maintain size even when hidden to prevent layout shift
+                    messagePanel.setPreferredSize(new Dimension(Integer.MAX_VALUE, 48));
+                    messagePanel.repaint();
+                });
+            });
+            timer.setRepeats(false);
+            timer.start();
+        });
     }
     
     private JTextField createTextField(String placeholder) {
