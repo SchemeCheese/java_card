@@ -3,7 +3,7 @@ package models;
 /**
  * Model class for library card information
  * Contains all student/cardholder data stored on the JavaCard
- * [UPDATED] Added pinRetryCount logic
+ * [UPDATED] Added pinRetryCount logic and avatar imagePath
  */
 public class CardInfo {
     private String studentId;      // MSSV - Mã số sinh viên
@@ -16,11 +16,8 @@ public class CardInfo {
     private int borrowedBooks;     // Số sách đang mượn
     private String pin;            // Mã PIN của sinh viên
     private long balance;          // Số dư tài khoản
-<<<<<<< HEAD
-    private int pinRetryCount;
-=======
     private String imagePath;      // Đường dẫn đến ảnh đại diện
->>>>>>> 25e9cd7 (Add avatar image upload to CardInfo and CardInfoPage)
+    private int pinRetryCount;
 
     public CardInfo() {
         this.studentId = "";
@@ -33,11 +30,8 @@ public class CardInfo {
         this.borrowedBooks = 0;
         this.pin = "000000";  // PIN mặc định
         this.balance = 0;
-<<<<<<< HEAD
-        this.pinRetryCount = 3;
-=======
         this.imagePath = "";
->>>>>>> 25e9cd7 (Add avatar image upload to CardInfo and CardInfoPage)
+        this.pinRetryCount = 3;
     }
 
     public CardInfo(String studentId, String holderName, String email,
@@ -52,110 +46,46 @@ public class CardInfo {
         this.borrowedBooks = 0;
         this.pin = "000000";  // PIN mặc định
         this.balance = 0;
-<<<<<<< HEAD
-        this.pinRetryCount = 3;
-=======
         this.imagePath = "";
->>>>>>> 25e9cd7 (Add avatar image upload to CardInfo and CardInfoPage)
+        this.pinRetryCount = 3;
     }
 
     // Getters and Setters
-    public String getStudentId() {
-        return studentId;
-    }
+    public String getStudentId() { return studentId; }
+    public void setStudentId(String studentId) { this.studentId = studentId; }
 
-    public void setStudentId(String studentId) {
-        this.studentId = studentId;
-    }
+    public String getHolderName() { return holderName; }
+    public void setHolderName(String holderName) { this.holderName = holderName; }
 
-    public String getHolderName() {
-        return holderName;
-    }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
 
-    public void setHolderName(String holderName) {
-        this.holderName = holderName;
-    }
+    public String getDepartment() { return department; }
+    public void setDepartment(String department) { this.department = department; }
 
-    public String getEmail() {
-        return email;
-    }
+    public String getBirthDate() { return birthDate; }
+    public void setBirthDate(String birthDate) { this.birthDate = birthDate; }
 
-    public void setEmail(String email) {
-        this.email = email;
-    }
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
 
-    public String getDepartment() {
-        return department;
-    }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
-    public void setDepartment(String department) {
-        this.department = department;
-    }
+    public int getBorrowedBooks() { return borrowedBooks; }
+    public void setBorrowedBooks(int borrowedBooks) { this.borrowedBooks = borrowedBooks; }
 
-    public String getBirthDate() {
-        return birthDate;
-    }
+    public String getPin() { return pin; }
+    public void setPin(String pin) { this.pin = pin; }
 
-    public void setBirthDate(String birthDate) {
-        this.birthDate = birthDate;
-    }
+    public long getBalance() { return balance; }
+    public void setBalance(long balance) { this.balance = balance; }
 
-    public String getAddress() {
-        return address;
-    }
+    public String getImagePath() { return imagePath; }
+    public void setImagePath(String imagePath) { this.imagePath = imagePath; }
 
-    public void setAddress(String address) {
-        this.address = address;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
-    }
-
-    public int getBorrowedBooks() {
-        return borrowedBooks;
-    }
-
-    public void setBorrowedBooks(int borrowedBooks) {
-        this.borrowedBooks = borrowedBooks;
-    }
-
-    public String getPin() {
-        return pin;
-    }
-
-    public void setPin(String pin) {
-        this.pin = pin;
-    }
-
-    public long getBalance() {
-        return balance;
-    }
-
-    public void setBalance(long balance) {
-        this.balance = balance;
-    }
-
-<<<<<<< HEAD
-    public int getPinRetryCount() {
-        return pinRetryCount;
-    }
-
-    public void setPinRetryCount(int pinRetryCount) {
-        this.pinRetryCount = pinRetryCount;
-=======
-    public String getImagePath() {
-        return imagePath;
-    }
-
-    public void setImagePath(String imagePath) {
-        this.imagePath = imagePath;
->>>>>>> 25e9cd7 (Add avatar image upload to CardInfo and CardInfoPage)
-    }
+    public int getPinRetryCount() { return pinRetryCount; }
+    public void setPinRetryCount(int pinRetryCount) { this.pinRetryCount = pinRetryCount; }
 
     public boolean isInitialized() {
         return studentId != null && !studentId.isEmpty()
@@ -168,6 +98,7 @@ public class CardInfo {
                 "studentId='" + studentId + '\'' +
                 ", holderName='" + holderName + '\'' +
                 ", status='" + status + '\'' +
+                ", imagePath='" + imagePath + '\'' +
                 ", pinRetryCount=" + pinRetryCount +
                 '}';
     }
