@@ -14,7 +14,7 @@ import java.util.List;
 
 /**
  * Main frame for Library Card Management System
- * [UPDATED] Tích hợp kết nối Simulator và kiểm tra PIN khi chuyển tab
+ * [FINAL FULL VERSION] Tích hợp chặn tab khi chưa đổi PIN
  */
 public class LibraryCardMainFrame extends JFrame {
     private JPanel mainContentPanel;
@@ -198,38 +198,52 @@ public class LibraryCardMainFrame extends JFrame {
         return tabsPanel;
     }
 
-    // Hàm kiểm tra trạng thái PIN
+    // Hàm kiểm tra trạng thái PIN - QUAN TRỌNG
     private boolean checkPinStatus() {
+        // 1. Kiểm tra đã đăng nhập chưa
         if (!simulatorService.isPinVerified()) {
             JOptionPane.showMessageDialog(this,
-                    "Vui lòng xác thực PIN để truy cập chức năng này!",
+                    "Vui lòng đăng nhập để truy cập chức năng này!",
                     "Yêu cầu xác thực", JOptionPane.WARNING_MESSAGE);
-            // Chuyển về tab PIN
             showPinPage();
-            // Cập nhật highlight tab về PIN
             updateTabHighlights(tabLabels.get("pin"));
             return false;
         }
+
+        // 2. [NEW] Kiểm tra bắt buộc đổi PIN (nếu là Sinh viên & PIN mặc định)
+        if (simulatorService.isChangePinRequired()) {
+            JOptionPane.showMessageDialog(this,
+                    "BẢO MẬT: Bạn phải đổi mã PIN mặc định trước khi sử dụng các chức năng khác!",
+                    "Yêu Cầu Đổi PIN", JOptionPane.WARNING_MESSAGE);
+
+            // Ép quay lại trang PIN
+            showPinPage();
+            updateTabHighlights(tabLabels.get("pin"));
+            return false;
+        }
+
         return true;
     }
-    
+
     // Hàm kiểm tra quyền Admin cho tab Hệ Thống
     private void checkAdminAccess() {
         if (!simulatorService.isPinVerified()) {
             JOptionPane.showMessageDialog(this,
-                    "Vui lòng xác thực PIN để truy cập chức năng này!",
+                    "Vui lòng đăng nhập để truy cập chức năng này!",
                     "Yêu cầu xác thực", JOptionPane.WARNING_MESSAGE);
-            return; // Không chuyển tab, chỉ hiện dialog
+            showPinPage();
+            updateTabHighlights(tabLabels.get("pin"));
+            return;
         }
-        
+
         // Kiểm tra role là Admin
         if (!"Admin".equals(simulatorService.getCurrentRole())) {
             JOptionPane.showMessageDialog(this,
                     "Chỉ Admin mới có quyền truy cập Hệ Thống!",
                     "Không có quyền", JOptionPane.WARNING_MESSAGE);
-            return; // Không chuyển tab, chỉ hiện dialog
+            return;
         }
-        
+
         // Nếu là Admin, chuyển đến trang Settings
         showSettingsPage();
         updateTabHighlights(tabLabels.get("settings"));
@@ -255,7 +269,7 @@ public class LibraryCardMainFrame extends JFrame {
                 if (!simulatorService.isPinVerified() && !text.equals("PIN & Bảo Mật")) {
                     return;
                 }
-                
+
                 // Nếu tab Hệ Thống mà không phải Admin, không highlight
                 if (text.equals("Hệ Thống") && !"Admin".equals(simulatorService.getCurrentRole())) {
                     return;

@@ -3,6 +3,7 @@ package models;
 /**
  * Model class for library card information
  * Contains all student/cardholder data stored on the JavaCard
+ * [UPDATED] Added pinRetryCount logic
  */
 public class CardInfo {
     private String studentId;      // MSSV - Mã số sinh viên
@@ -16,6 +17,7 @@ public class CardInfo {
     private String pin;            // Mã PIN của sinh viên
     private long balance;          // Số dư tài khoản
     private String imagePath;      // Đường dẫn đến ảnh đại diện
+    private int pinRetryCount;
 
     public CardInfo() {
         this.studentId = "";
@@ -29,9 +31,10 @@ public class CardInfo {
         this.pin = "000000";  // PIN mặc định
         this.balance = 0;
         this.imagePath = "";
+        this.pinRetryCount = 3;
     }
 
-    public CardInfo(String studentId, String holderName, String email, 
+    public CardInfo(String studentId, String holderName, String email,
                     String department, String birthDate, String address) {
         this.studentId = studentId;
         this.holderName = holderName;
@@ -44,6 +47,7 @@ public class CardInfo {
         this.pin = "000000";  // PIN mặc định
         this.balance = 0;
         this.imagePath = "";
+        this.pinRetryCount = 3;
     }
 
     // Getters and Setters
@@ -135,9 +139,17 @@ public class CardInfo {
         this.imagePath = imagePath;
     }
 
+    public int getPinRetryCount() {
+        return pinRetryCount;
+    }
+
+    public void setPinRetryCount(int pinRetryCount) {
+        this.pinRetryCount = pinRetryCount;
+    }
+
     public boolean isInitialized() {
-        return studentId != null && !studentId.isEmpty() 
-            && holderName != null && !holderName.isEmpty();
+        return studentId != null && !studentId.isEmpty()
+                && holderName != null && !holderName.isEmpty();
     }
 
     @Override
@@ -145,13 +157,9 @@ public class CardInfo {
         return "CardInfo{" +
                 "studentId='" + studentId + '\'' +
                 ", holderName='" + holderName + '\'' +
-                ", email='" + email + '\'' +
-                ", department='" + department + '\'' +
-                ", birthDate='" + birthDate + '\'' +
-                ", address='" + address + '\'' +
                 ", status='" + status + '\'' +
-                ", borrowedBooks=" + borrowedBooks +
+                ", imagePath='" + imagePath + '\'' +
+                ", pinRetryCount=" + pinRetryCount +
                 '}';
     }
 }
-
