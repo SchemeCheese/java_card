@@ -3,7 +3,7 @@ package models;
 /**
  * Model class for library card information
  * Contains all student/cardholder data stored on the JavaCard
- * [UPDATED] Added pinRetryCount logic and avatar imagePath
+ * [UPDATED] Added pinRetryCount logic
  */
 public class CardInfo {
     private String studentId;      // MSSV - Mã số sinh viên
@@ -51,41 +51,101 @@ public class CardInfo {
     }
 
     // Getters and Setters
-    public String getStudentId() { return studentId; }
-    public void setStudentId(String studentId) { this.studentId = studentId; }
+    public String getStudentId() {
+        return studentId;
+    }
 
-    public String getHolderName() { return holderName; }
-    public void setHolderName(String holderName) { this.holderName = holderName; }
+    public void setStudentId(String studentId) {
+        this.studentId = studentId;
+    }
 
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
+    public String getHolderName() {
+        return holderName;
+    }
 
-    public String getDepartment() { return department; }
-    public void setDepartment(String department) { this.department = department; }
+    public void setHolderName(String holderName) {
+        this.holderName = holderName;
+    }
 
-    public String getBirthDate() { return birthDate; }
-    public void setBirthDate(String birthDate) { this.birthDate = birthDate; }
+    public String getEmail() {
+        return email;
+    }
 
-    public String getAddress() { return address; }
-    public void setAddress(String address) { this.address = address; }
+    public void setEmail(String email) {
+        this.email = email;
+    }
 
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
+    public String getDepartment() {
+        return department;
+    }
 
-    public int getBorrowedBooks() { return borrowedBooks; }
-    public void setBorrowedBooks(int borrowedBooks) { this.borrowedBooks = borrowedBooks; }
+    public void setDepartment(String department) {
+        this.department = department;
+    }
 
-    public String getPin() { return pin; }
-    public void setPin(String pin) { this.pin = pin; }
+    public String getBirthDate() {
+        return birthDate;
+    }
 
-    public long getBalance() { return balance; }
-    public void setBalance(long balance) { this.balance = balance; }
+    public void setBirthDate(String birthDate) {
+        this.birthDate = birthDate;
+    }
 
-    public String getImagePath() { return imagePath; }
-    public void setImagePath(String imagePath) { this.imagePath = imagePath; }
+    public String getAddress() {
+        return address;
+    }
 
-    public int getPinRetryCount() { return pinRetryCount; }
-    public void setPinRetryCount(int pinRetryCount) { this.pinRetryCount = pinRetryCount; }
+    public void setAddress(String address) {
+        this.address = address;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public int getBorrowedBooks() {
+        return borrowedBooks;
+    }
+
+    public void setBorrowedBooks(int borrowedBooks) {
+        this.borrowedBooks = borrowedBooks;
+    }
+
+    public String getPin() {
+        return pin;
+    }
+
+    public void setPin(String pin) {
+        this.pin = pin;
+    }
+
+    public long getBalance() {
+        return balance;
+    }
+
+    public void setBalance(long balance) {
+        this.balance = balance;
+    }
+
+    public String getImagePath() {
+        return imagePath;
+    }
+
+    public void setImagePath(String imagePath) {
+        this.imagePath = imagePath;
+    }
+
+    public int getPinRetryCount() {
+        return pinRetryCount;
+    }
+
+    public void setPinRetryCount(int pinRetryCount) {
+        this.pinRetryCount = pinRetryCount;
+    }
 
     public boolean isInitialized() {
         return studentId != null && !studentId.isEmpty()
