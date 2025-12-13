@@ -1,0 +1,326 @@
+### File này dùng để test API với REST Client extension trong VS Code
+### Hoặc dùng Postman/Insomnia để import
+
+### Variables
+@baseUrl = http://localhost:3000/api
+@studentId = 2021600001
+
+### Health Check
+GET {{baseUrl}}/health
+
+### ========================================
+### CARD APIs
+### ========================================
+
+### 1. Create a new card
+POST {{baseUrl}}/cards
+Content-Type: application/json
+
+{
+  "studentId": "2021600001",
+  "holderName": "Nguyễn Văn A",
+  "email": "nguyenvana@example.com",
+  "department": "Công nghệ thông tin",
+  "birthDate": "01/01/2000",
+  "address": "123 Đường ABC, TP.HCM",
+  "pin": "123456"
+}
+
+### 2. Get card by student ID
+GET {{baseUrl}}/cards/{{studentId}}
+
+### 3. Get all cards
+GET {{baseUrl}}/cards
+
+### 4. Update card information
+PUT {{baseUrl}}/cards/{{studentId}}
+Content-Type: application/json
+
+{
+  "email": "newemail@example.com",
+  "address": "Địa chỉ mới, TP.HCM"
+}
+
+### 5. Update balance (deposit)
+PATCH {{baseUrl}}/cards/{{studentId}}/balance
+Content-Type: application/json
+
+{
+  "amount": 100000
+}
+
+### 6. Delete card
+DELETE {{baseUrl}}/cards/{{studentId}}
+
+### ========================================
+### PIN APIs
+### ========================================
+
+### 1. Verify PIN (correct)
+POST {{baseUrl}}/pin/verify
+Content-Type: application/json
+
+{
+  "studentId": "{{studentId}}",
+  "pin": "123456"
+}
+
+### 2. Verify PIN (wrong)
+POST {{baseUrl}}/pin/verify
+Content-Type: application/json
+
+{
+  "studentId": "{{studentId}}",
+  "pin": "000000"
+}
+
+### 3. Change PIN
+POST {{baseUrl}}/pin/change
+Content-Type: application/json
+
+{
+  "studentId": "{{studentId}}",
+  "oldPin": "123456",
+  "newPin": "654321"
+}
+
+### 4. Get PIN tries remaining
+GET {{baseUrl}}/pin/tries/{{studentId}}
+
+### 5. Reset PIN tries (admin)
+POST {{baseUrl}}/pin/reset/{{studentId}}
+
+### ========================================
+### LIBRARY BOOK INVENTORY APIs (Quản lý sách trong thư viện)
+### ========================================
+
+### 1. Get all books in library
+GET {{baseUrl}}/library/books
+
+### 2. Search books
+GET {{baseUrl}}/library/books/search?query=Java
+
+### 3. Get books by category
+GET {{baseUrl}}/library/books?category=Lập trình
+
+### 4. Get book by ID
+GET {{baseUrl}}/library/books/BOOK001
+
+### 5. Get all categories
+GET {{baseUrl}}/library/books/categories
+
+### 6. Get book statistics
+GET {{baseUrl}}/library/books/stats
+
+### 7. Add new book to library
+POST {{baseUrl}}/library/books
+Content-Type: application/json
+
+{
+  "bookId": "BOOK011",
+  "title": "Python Programming",
+  "author": "John Doe",
+  "isbn": "978-1-234-56789-0",
+  "publisher": "Tech Publisher",
+  "publishYear": 2023,
+  "category": "Lập trình",
+  "description": "Learn Python from scratch",
+  "totalCopies": 5,
+  "location": "Kệ A-20"
+}
+
+### 8. Update book information
+PUT {{baseUrl}}/library/books/BOOK011
+Content-Type: application/json
+
+{
+  "totalCopies": 7,
+  "location": "Kệ A-21"
+}
+
+### 9. Update available copies
+PATCH {{baseUrl}}/library/books/BOOK011/copies
+Content-Type: application/json
+
+{
+  "availableCopies": 6
+}
+
+### 10. Delete book from library
+DELETE {{baseUrl}}/library/books/BOOK011
+
+### ========================================
+### BORROWED BOOK APIs (Mượn/trả sách)
+### ========================================
+
+### 1. Borrow a book
+POST {{baseUrl}}/books/borrow
+Content-Type: application/json
+
+{
+  "studentId": "{{studentId}}",
+  "bookId": "BOOK001",
+  "bookName": "Lập trình Java căn bản",
+  "dueDate": "2024-02-15"
+}
+
+### 2. Borrow another book
+POST {{baseUrl}}/books/borrow
+Content-Type: application/json
+
+{
+  "studentId": "{{studentId}}",
+  "bookId": "BOOK002",
+  "bookName": "Cấu trúc dữ liệu và giải thuật",
+  "dueDate": "2024-02-20"
+}
+
+### 3. Get borrowed books by student
+GET {{baseUrl}}/books/student/{{studentId}}
+
+### 4. Get borrowed books by status
+GET {{baseUrl}}/books/student/{{studentId}}?status=Đang mượn
+
+### 5. Get all borrowed books
+GET {{baseUrl}}/books
+
+### 6. Return a book (replace :borrowId with actual ID from previous response)
+PATCH {{baseUrl}}/books/return/65a1234567890abcdef12345
+
+### 7. Delete borrowed book record
+DELETE {{baseUrl}}/books/65a1234567890abcdef12345
+
+### ========================================
+### TRANSACTION APIs
+### ========================================
+
+### 1. Create transaction - Deposit
+POST {{baseUrl}}/transactions
+Content-Type: application/json
+
+{
+  "studentId": "{{studentId}}",
+  "type": "Nạp tiền",
+  "amount": 100000,
+  "description": "Nạp tiền vào thẻ thư viện"
+}
+
+### 2. Create transaction - Pay fine
+POST {{baseUrl}}/transactions
+Content-Type: application/json
+
+{
+  "studentId": "{{studentId}}",
+  "type": "Trả phạt",
+  "amount": 25000,
+  "description": "Trả phạt trễ hạn 5 ngày"
+}
+
+### 3. Create transaction - Withdraw
+POST {{baseUrl}}/transactions
+Content-Type: application/json
+
+{
+  "studentId": "{{studentId}}",
+  "type": "Rút tiền",
+  "amount": 50000,
+  "description": "Rút tiền"
+}
+
+### 4. Get transactions by student
+GET {{baseUrl}}/transactions/student/{{studentId}}
+
+### 5. Get transactions with filters
+GET {{baseUrl}}/transactions/student/{{studentId}}?type=Nạp tiền&limit=10
+
+### 6. Get transaction stats
+GET {{baseUrl}}/transactions/student/{{studentId}}/stats
+
+### 7. Get all transactions
+GET {{baseUrl}}/transactions
+
+### 8. Get transaction by ID (replace with actual ID)
+GET {{baseUrl}}/transactions/65a1234567890abcdef12345
+
+### ========================================
+### TEST SCENARIOS
+### ========================================
+
+### Scenario 1: Create card and verify PIN
+# 1. Create card
+POST {{baseUrl}}/cards
+Content-Type: application/json
+
+{
+  "studentId": "2021600002",
+  "holderName": "Trần Thị B",
+  "email": "tranthib@example.com",
+  "department": "Điện tử viễn thông",
+  "birthDate": "15/05/1999",
+  "address": "456 Đường XYZ, Hà Nội",
+  "pin": "111111"
+}
+
+# 2. Verify PIN
+POST {{baseUrl}}/pin/verify
+Content-Type: application/json
+
+{
+  "studentId": "2021600002",
+  "pin": "111111"
+}
+
+### Scenario 2: Borrow book and create transactions
+# 1. Deposit money
+POST {{baseUrl}}/transactions
+Content-Type: application/json
+
+{
+  "studentId": "2021600002",
+  "type": "Nạp tiền",
+  "amount": 200000,
+  "description": "Nạp tiền ban đầu"
+}
+
+# 2. Borrow book
+POST {{baseUrl}}/books/borrow
+Content-Type: application/json
+
+{
+  "studentId": "2021600002",
+  "bookId": "BOOK003",
+  "bookName": "Design Patterns",
+  "dueDate": "2024-01-31"
+}
+
+# 3. Check balance
+GET {{baseUrl}}/cards/2021600002
+
+# 4. Check borrowed books
+GET {{baseUrl}}/books/student/2021600002
+
+### Scenario 3: Wrong PIN multiple times
+# Try 1 - Wrong PIN
+POST {{baseUrl}}/pin/verify
+Content-Type: application/json
+
+{
+  "studentId": "2021600002",
+  "pin": "000000"
+}
+
+# Try 2 - Wrong PIN
+POST {{baseUrl}}/pin/verify
+Content-Type: application/json
+
+{
+  "studentId": "2021600002",
+  "pin": "999999"
+}
+
+# Check tries remaining
+GET {{baseUrl}}/pin/tries/2021600002
+
+# Reset tries (admin)
+POST {{baseUrl}}/pin/reset/2021600002
+
