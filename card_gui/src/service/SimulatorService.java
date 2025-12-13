@@ -438,18 +438,10 @@ public class SimulatorService {
     public boolean deposit(String studentCode, long amount) {
         if (useServerApi) {
             try {
-                CardInfo card = cardApiService.getCard(studentCode);
-                if (card == null) return false;
-                long balanceBefore = card.getBalance();
-                long balanceAfter = balanceBefore + amount;
-                
-                // Tạo transaction
+                // Tạo transaction - server sẽ tự động cập nhật balance
                 transactionApiService.createTransaction(
-                    studentCode, "Nạp tiền", amount, balanceBefore, balanceAfter, "Nạp tiền qua GUI"
+                    studentCode, "Nạp tiền", amount, "Nạp tiền qua GUI"
                 );
-                
-                // Cập nhật balance
-                cardApiService.updateBalance(studentCode, amount);
                 return true;
             } catch (Exception e) {
                 e.printStackTrace();
@@ -472,16 +464,10 @@ public class SimulatorService {
     public boolean payFine(String studentCode, long amount) {
         if (useServerApi) {
             try {
-                CardInfo card = cardApiService.getCard(studentCode);
-                if (card == null || card.getBalance() < amount) return false;
-                long balanceBefore = card.getBalance();
-                long balanceAfter = balanceBefore - amount;
-                
+                // Tạo transaction - server sẽ tự động cập nhật balance
                 transactionApiService.createTransaction(
-                    studentCode, "Trả phạt", amount, balanceBefore, balanceAfter, "Thanh toán tiền phạt"
+                    studentCode, "Trả phạt", amount, "Thanh toán tiền phạt"
                 );
-                
-                cardApiService.updateBalance(studentCode, -amount);
                 return true;
             } catch (Exception e) {
                 e.printStackTrace();

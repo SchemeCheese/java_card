@@ -214,7 +214,7 @@ public class FinancePage extends JPanel {
                 amountField.setText(amt);
                 String digits = amt.replaceAll("[^0-9]", "");
                 if (!digits.isEmpty()) {
-                    long value = Long.parseLong(digits) * 1000L; // vì chuỗi là 50,000 etc.
+                    long value = Long.parseLong(digits); // Không nhân 1000, vì "50,000" -> "50000" đã là giá trị đúng
                     handleTopup(value);
                 }
             });
@@ -342,7 +342,7 @@ public class FinancePage extends JPanel {
         header.add(searchPanel, BorderLayout.EAST);
         
         // Table
-        String[] cols = {"Ngày", "Loại Giao Dịch", "Số Tiền", "Trạng Thái"};
+        String[] cols = {"Thời Gian", "Loại Giao Dịch", "Số Tiền", "Trạng Thái"};
         historyModel = new DefaultTableModel(cols, 0);
         
         NumberFormat fmt = NumberFormat.getInstance(new Locale("vi", "VN"));

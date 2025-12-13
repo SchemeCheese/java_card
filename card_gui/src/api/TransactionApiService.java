@@ -23,16 +23,13 @@ public class TransactionApiService {
     }
     
     /**
-     * Create a transaction
+     * Create a transaction (simplified - server calculates balance)
      */
-    public Transaction createTransaction(String studentId, String type, long amount, 
-                                       long balanceBefore, long balanceAfter, String description) throws IOException {
+    public Transaction createTransaction(String studentId, String type, long amount, String description) throws IOException {
         JsonObject body = new JsonObject();
         body.addProperty("studentId", studentId);
         body.addProperty("type", type);
         body.addProperty("amount", amount);
-        body.addProperty("balanceBefore", balanceBefore);
-        body.addProperty("balanceAfter", balanceAfter);
         body.addProperty("description", description != null ? description : "");
         
         ApiClient.ApiResponse response = apiClient.post("/transactions", body);
@@ -42,6 +39,15 @@ public class TransactionApiService {
         }
         
         return parseTransactionFromJson(response.getData().getAsJsonObject("data"));
+    }
+    
+    /**
+     * Create a transaction (with balance info - for compatibility)
+     */
+    public Transaction createTransaction(String studentId, String type, long amount, 
+                                       long balanceBefore, long balanceAfter, String description) throws IOException {
+        // Just call the simplified version - server will calculate balance
+        return createTransaction(studentId, type, amount, description);
     }
     
     /**
@@ -142,16 +148,57 @@ public class TransactionApiService {
      */
     private Transaction parseTransactionFromJson(JsonObject json) {
         try {
-            String date = json.has("createdAt") ? formatDate(json.get("createdAt").getAsString()) : "";
-            String description = json.has("description") ? json.get("description").getAsString() : 
-                                (json.has("type") ? json.get("type").getAsString() : "");
+            // Try multiple date field names
+            String date = "";
+            if (json.has("createdAt")) {
+                date = formatDateTime(json.get("createdAt").getAsString());
+            } else if (json.has("created_at")) {
+                date = formatDateTime(json.get("created_at").getAsString());
+            } else if (json.has("date")) {
+                date = json.get("date").getAsString();
+            }
+            
+            // If still no date, use today's date
+            if (date.isEmpty()) {
+                date = dateFormat.format(new Date());
+            }
+            
+            String type = json.has("type") ? json.get("type").getAsString() : "";
+            String description = json.has("description") ? json.get("description").getAsString() : type;
             long amount = json.has("amount") ? json.get("amount").getAsLong() : 0;
             String status = json.has("status") ? json.get("status").getAsString() : "Thành công";
             
-            return new Transaction(date, description, amount, status);
+            return new Transaction(date, type, amount, status);
         } catch (Exception e) {
             e.printStackTrace();
             return null;
+        }
+    }
+    
+    /**
+     * Format date string from ISO format to dd/MM/yyyy HH:mm:ss (UTC+7)
+     */
+    private String formatDateTime(String isoDate) {
+        try {
+            SimpleDateFormat isoFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+            isoFormat.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+            Date date = isoFormat.parse(isoDate);
+            
+            SimpleDateFormat outputFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+            outputFormat.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Ho_Chi_Minh")); // UTC+7
+            return outputFormat.format(date);
+        } catch (Exception e) {
+            try {
+                SimpleDateFormat isoFormat2 = new SimpleDateFormat("yyyy-MM-dd");
+                isoFormat2.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                Date date = isoFormat2.parse(isoDate);
+                
+                SimpleDateFormat outputFormat = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+                outputFormat.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Ho_Chi_Minh")); // UTC+7
+                return outputFormat.format(date);
+            } catch (Exception e2) {
+                return isoDate;
+            }
         }
     }
     
