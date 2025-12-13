@@ -171,6 +171,38 @@ exports.getPinTries = async (req, res) => {
     }
 };
 
+// Check if PIN is default (000000)
+exports.isDefaultPin = async (req, res) => {
+    try {
+        const { studentId } = req.params;
+
+        const card = await Card.findOne({ where: { studentId } });
+
+        if (!card) {
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy thẻ'
+            });
+        }
+
+        // Check if current PIN is default (000000)
+        const defaultPinHash = generatePinHash('000000', card.pinSalt);
+        const isDefault = (defaultPinHash === card.pinHash);
+
+        res.json({
+            success: true,
+            isDefaultPin: isDefault
+        });
+    } catch (error) {
+        console.error('Check default PIN error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi khi kiểm tra PIN mặc định',
+            error: error.message
+        });
+    }
+};
+
 // Reset PIN tries (admin only)
 exports.resetPinTries = async (req, res) => {
     try {
