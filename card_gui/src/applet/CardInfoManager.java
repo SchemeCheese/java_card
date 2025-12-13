@@ -5,13 +5,18 @@ import javacard.framework.*;
 /**
  * Module quản lý thông tin thẻ
  * Xử lý lưu trữ và truy xuất thông tin thẻ: ID, tên, ngày hết hạn
+ * Hỗ trợ AES: Lưu dữ liệu đã được mã hóa từ client
  */
 public class CardInfoManager {
     
+    // Dữ liệu có thể được mã hóa (client mã hóa trước khi gửi)
     private byte[] cardId;
     private byte[] holderName;
     private byte holderNameLength;
     private byte[] expiryDate; // DDMMYYYY format
+    
+    // Flag để biết dữ liệu có được mã hóa không
+    private boolean encrypted;
     
     /**
      * Khởi tạo CardInfoManager
@@ -21,11 +26,13 @@ public class CardInfoManager {
         holderName = new byte[AppletConstants.NAME_MAX_LENGTH];
         expiryDate = new byte[AppletConstants.EXPIRY_DATE_LENGTH];
         holderNameLength = 0;
+        encrypted = false;
     }
     
     /**
      * Thiết lập thông tin thẻ (yêu cầu xác thực PIN)
-     * Format: [CARD_ID][NAME_LENGTH][NAME][EXPIRY_DATE]
+     * Format: [ENCRYPTED_FLAG (1 byte)] [CARD_ID][NAME_LENGTH][NAME][EXPIRY_DATE]
+     * Nếu ENCRYPTED_FLAG = 1, dữ liệu đã được mã hóa AES từ client
      * 
      * @param apdu APDU command
      * @param pinManager PinManager để kiểm tra PIN đã xác thực
@@ -39,11 +46,14 @@ public class CardInfoManager {
         apdu.setIncomingAndReceive();
         short offset = ISO7816.OFFSET_CDATA;
         
-        // Đọc Card ID (10 bytes)
+        // Đọc flag mã hóa (1 byte)
+        encrypted = (buffer[offset++] == (byte)0x01);
+        
+        // Đọc Card ID (10 bytes) - có thể đã mã hóa
         Util.arrayCopy(buffer, offset, cardId, (short)0, AppletConstants.CARD_ID_LENGTH);
         offset += AppletConstants.CARD_ID_LENGTH;
         
-        // Đọc tên (độ dài biến đổi)
+        // Đọc tên (độ dài biến đổi) - có thể đã mã hóa
         holderNameLength = buffer[offset++];
         if (holderNameLength > AppletConstants.NAME_MAX_LENGTH) {
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
@@ -51,13 +61,13 @@ public class CardInfoManager {
         Util.arrayCopy(buffer, offset, holderName, (short)0, holderNameLength);
         offset += holderNameLength;
         
-        // Đọc ngày hết hạn (8 bytes - DDMMYYYY)
+        // Đọc ngày hết hạn (8 bytes - DDMMYYYY) - có thể đã mã hóa
         Util.arrayCopy(buffer, offset, expiryDate, (short)0, AppletConstants.EXPIRY_DATE_LENGTH);
     }
     
     /**
      * Lấy thông tin thẻ
-     * Response: [CARD_ID][NAME_LENGTH][NAME][EXPIRY_DATE][NUM_BOOKS]
+     * Response: [ENCRYPTED_FLAG (1 byte)] [CARD_ID][NAME_LENGTH][NAME][EXPIRY_DATE][NUM_BOOKS]
      * 
      * @param apdu APDU command
      * @param numBorrowedBooks Số lượng sách đang mượn (từ BookManager)
@@ -66,16 +76,19 @@ public class CardInfoManager {
         byte[] buffer = apdu.getBuffer();
         short offset = 0;
         
-        // Card ID
+        // Encrypted flag
+        buffer[offset++] = encrypted ? (byte)0x01 : (byte)0x00;
+        
+        // Card ID (có thể đã mã hóa)
         Util.arrayCopy(cardId, (short)0, buffer, offset, AppletConstants.CARD_ID_LENGTH);
         offset += AppletConstants.CARD_ID_LENGTH;
         
-        // Name
+        // Name (có thể đã mã hóa)
         buffer[offset++] = holderNameLength;
         Util.arrayCopy(holderName, (short)0, buffer, offset, holderNameLength);
         offset += holderNameLength;
         
-        // Expiry Date
+        // Expiry Date (có thể đã mã hóa)
         Util.arrayCopy(expiryDate, (short)0, buffer, offset, AppletConstants.EXPIRY_DATE_LENGTH);
         offset += AppletConstants.EXPIRY_DATE_LENGTH;
         

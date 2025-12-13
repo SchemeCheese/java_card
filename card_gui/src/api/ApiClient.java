@@ -133,9 +133,13 @@ public class ApiClient {
      */
     public boolean isServerAvailable() {
         try {
+            System.out.println("[ApiClient] Checking server availability at " + BASE_URL + "/health");
             ApiResponse response = get("/health");
-            return response.isSuccess();
+            boolean available = response.isSuccess();
+            System.out.println("[ApiClient] Server available: " + available + " (status: " + response.getStatusCode() + ")");
+            return available;
         } catch (Exception e) {
+            System.err.println("[ApiClient] Server not available: " + e.getMessage());
             return false;
         }
     }

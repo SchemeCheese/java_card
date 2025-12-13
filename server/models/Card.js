@@ -20,20 +20,24 @@ const Card = sequelize.define('Card', {
     },
     email: {
         type: DataTypes.STRING(100),
-        allowNull: false
+        allowNull: true,
+        defaultValue: ''
     },
     department: {
         type: DataTypes.STRING(100),
-        allowNull: false
+        allowNull: true,
+        defaultValue: ''
     },
     birthDate: {
         type: DataTypes.STRING(10),
-        allowNull: false,
+        allowNull: true,
+        defaultValue: '',
         field: 'birth_date'
     },
     address: {
         type: DataTypes.STRING(255),
-        allowNull: false
+        allowNull: true,
+        defaultValue: ''
     },
     status: {
         type: DataTypes.ENUM('Hoạt động', 'Khóa', 'Tạm khóa'),
@@ -65,13 +69,8 @@ const Card = sequelize.define('Card', {
         type: DataTypes.DATE,
         allowNull: true,
         field: 'rsa_key_created_at'
-    },
-    aesMasterKeyHash: {
-        type: DataTypes.STRING(255),
-        allowNull: true,
-        field: 'aes_master_key_hash',
-        comment: 'Hash of AES master key for this card'
     }
+    // aesMasterKeyHash removed - not used in application (no comma needed - last field before closing brace)
 }, {
     tableName: 'cards',
     timestamps: true,

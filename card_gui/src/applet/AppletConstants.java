@@ -28,6 +28,16 @@ public class AppletConstants {
     public static final byte INS_GET_BORROWED_BOOKS = (byte)0x70;
     public static final byte INS_RETURN_BOOK = (byte)0x80;
 
+    // INS codes - RSA Authentication
+    public static final byte INS_RSA_GENERATE_KEYPAIR = (byte)0xB0;
+    public static final byte INS_RSA_GET_PUBLIC_KEY = (byte)0xB1;
+    public static final byte INS_RSA_SIGN_CHALLENGE = (byte)0xB2;
+
+    // INS codes - AES Encryption
+    public static final byte INS_AES_SET_KEY = (byte)0xC0;
+    public static final byte INS_AES_ENCRYPT = (byte)0xC1;
+    public static final byte INS_AES_DECRYPT = (byte)0xC2;
+
     // PIN Configuration
     public static final byte PIN_TRY_LIMIT = (byte)3;
     public static final byte PIN_MAX_SIZE = (byte)32; // [UPDATED] 32 bytes cho SHA-256
@@ -41,6 +51,17 @@ public class AppletConstants {
     // Book Management Configuration
     public static final byte MAX_BORROWED_BOOKS = (byte)10;
     public static final byte BOOK_ID_LENGTH = (byte)8;
+
+    // RSA Configuration
+    public static final short RSA_KEY_SIZE = (short)1024;  // 1024-bit RSA
+    public static final short RSA_MODULUS_SIZE = (short)128;  // 1024 bits = 128 bytes
+    public static final short RSA_EXPONENT_SIZE = (short)3;  // Usually 3 bytes (65537 = 0x010001)
+    public static final short RSA_SIGNATURE_SIZE = (short)128;  // 1024-bit signature = 128 bytes
+    public static final short RSA_CHALLENGE_SIZE = (short)16;  // 16 bytes challenge
+
+    // AES Configuration
+    public static final byte AES_KEY_SIZE = (byte)16;  // AES-128: 16 bytes key
+    public static final byte AES_BLOCK_SIZE = (byte)16;  // AES block size: 16 bytes
 
     // Default Values (Thêm vào để SimulatorService sử dụng)
     public static final String DEFAULT_PIN = "000000";  // 6 số 0

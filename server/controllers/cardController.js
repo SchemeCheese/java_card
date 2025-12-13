@@ -45,17 +45,16 @@ exports.createCard = async (req, res) => {
             department,
             birthDate,
             address,
-            pin,
             rsaPublicKey,
             rsaModulus,
             rsaExponent
         } = req.body;
 
-        // Validate required fields (PIN no longer required - stored on card only)
-        if (!studentId || !holderName || !email || !department || !birthDate || !address) {
+        // Validate required fields - chỉ cần studentId và holderName
+        if (!studentId || !holderName) {
             return res.status(400).json({
                 success: false,
-                message: 'Vui lòng cung cấp đầy đủ thông tin'
+                message: 'Vui lòng cung cấp MSSV và Họ tên'
             });
         }
 
@@ -70,6 +69,7 @@ exports.createCard = async (req, res) => {
 
         // ⚠️ PIN is no longer stored on server - must be set on card (applet) only
         // PIN verification must be done on card for security
+        // ⚠️ email, department, birthDate, address are optional - stored on card (applet) via AES encryption
 
         // Convert RSA key if provided in JavaCard format (modulus + exponent)
         let rsaPublicKeyPEM = rsaPublicKey;
@@ -77,14 +77,14 @@ exports.createCard = async (req, res) => {
             rsaPublicKeyPEM = convertRSAPublicKeyToPEM(rsaModulus, rsaExponent);
         }
 
-        // Create new card (PIN is stored on card only, not on server)
+        // Create new card - chỉ lưu studentId và holderName, các trường khác là optional
         const newCard = await Card.create({
             studentId,
             holderName,
-            email,
-            department,
-            birthDate,
-            address,
+            email: email || '',
+            department: department || '',
+            birthDate: birthDate || '',
+            address: address || '',
             balance: 0,
             borrowedBooksCount: 0,
             status: 'Hoạt động',

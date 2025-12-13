@@ -18,6 +18,7 @@ public class CardInfo {
     private long balance;          // Số dư tài khoản
     private String imagePath;      // Đường dẫn đến ảnh đại diện
     private int pinRetryCount;
+    private String rsaPublicKey;   // RSA public key (PEM format)
 
     public CardInfo() {
         this.studentId = "";
@@ -48,6 +49,7 @@ public class CardInfo {
         this.balance = 0;
         this.imagePath = "";
         this.pinRetryCount = 3;
+        this.rsaPublicKey = "";
     }
 
     // Getters and Setters
@@ -145,6 +147,14 @@ public class CardInfo {
 
     public void setPinRetryCount(int pinRetryCount) {
         this.pinRetryCount = pinRetryCount;
+    }
+
+    public String getRsaPublicKey() {
+        return rsaPublicKey;
+    }
+
+    public void setRsaPublicKey(String rsaPublicKey) {
+        this.rsaPublicKey = rsaPublicKey;
     }
 
     public boolean isInitialized() {

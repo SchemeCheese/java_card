@@ -44,7 +44,6 @@ CREATE TABLE IF NOT EXISTS cards (
     image_path VARCHAR(255) DEFAULT '',
     rsa_public_key TEXT COMMENT 'RSA Public Key (PEM format) for card authentication',
     rsa_key_created_at TIMESTAMP NULL COMMENT 'Thời gian tạo khóa RSA',
-    aes_master_key_hash VARCHAR(255) COMMENT 'Hash of AES master key for this card',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_student_id (student_id),
