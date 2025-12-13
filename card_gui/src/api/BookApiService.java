@@ -63,7 +63,7 @@ public class BookApiService {
             queryParams.append("&status=").append(status);
         }
         
-        ApiClient.ApiResponse response = apiClient.get("/books/borrowed/" + studentId, queryParams.toString());
+        ApiClient.ApiResponse response = apiClient.get("/books/student/" + studentId, queryParams.toString());
         
         if (!response.isSuccess()) {
             throw new IOException("Failed to get borrowed books: " + response.getMessage());
