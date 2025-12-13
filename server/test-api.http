@@ -55,26 +55,10 @@ DELETE {{baseUrl}}/cards/{{studentId}}
 ### ========================================
 ### PIN APIs
 ### ========================================
+### ⚠️ NOTE: PIN verification should be done on card (applet), not on server
+### Use SimulatorService.verifyPin() in GUI application instead
 
-### 1. Verify PIN (correct)
-POST {{baseUrl}}/pin/verify
-Content-Type: application/json
-
-{
-  "studentId": "{{studentId}}",
-  "pin": "123456"
-}
-
-### 2. Verify PIN (wrong)
-POST {{baseUrl}}/pin/verify
-Content-Type: application/json
-
-{
-  "studentId": "{{studentId}}",
-  "pin": "000000"
-}
-
-### 3. Change PIN
+### 1. Change PIN
 POST {{baseUrl}}/pin/change
 Content-Type: application/json
 
@@ -84,11 +68,20 @@ Content-Type: application/json
   "newPin": "654321"
 }
 
-### 4. Get PIN tries remaining
+### 2. Get PIN tries remaining
 GET {{baseUrl}}/pin/tries/{{studentId}}
 
-### 5. Reset PIN tries (admin)
-POST {{baseUrl}}/pin/reset/{{studentId}}
+### 3. Reset PIN tries (admin)
+POST {{baseUrl}}/pin/reset-tries/{{studentId}}
+
+### 4. Admin Reset PIN (when card is lost)
+PUT {{baseUrl}}/pin/admin/reset/{{studentId}}
+Content-Type: application/json
+
+{
+  "newPin": "123456",
+  "adminKey": "ADMIN_DEFAULT_KEY_CHANGE_IN_PRODUCTION"
+}
 
 ### ========================================
 ### LIBRARY BOOK INVENTORY APIs (Quản lý sách trong thư viện)
@@ -261,14 +254,8 @@ Content-Type: application/json
   "pin": "111111"
 }
 
-# 2. Verify PIN
-POST {{baseUrl}}/pin/verify
-Content-Type: application/json
-
-{
-  "studentId": "2021600002",
-  "pin": "111111"
-}
+# 2. Verify PIN (should be done on card, not via API)
+# Use SimulatorService.verifyPin() in GUI application
 
 ### Scenario 2: Borrow book and create transactions
 # 1. Deposit money
@@ -300,27 +287,12 @@ GET {{baseUrl}}/cards/2021600002
 GET {{baseUrl}}/books/student/2021600002
 
 ### Scenario 3: Wrong PIN multiple times
-# Try 1 - Wrong PIN
-POST {{baseUrl}}/pin/verify
-Content-Type: application/json
-
-{
-  "studentId": "2021600002",
-  "pin": "000000"
-}
-
-# Try 2 - Wrong PIN
-POST {{baseUrl}}/pin/verify
-Content-Type: application/json
-
-{
-  "studentId": "2021600002",
-  "pin": "999999"
-}
+# ⚠️ NOTE: PIN verification should be done on card, not via API
+# Use SimulatorService.verifyPin() in GUI application
 
 # Check tries remaining
 GET {{baseUrl}}/pin/tries/2021600002
 
 # Reset tries (admin)
-POST {{baseUrl}}/pin/reset/2021600002
+POST {{baseUrl}}/pin/reset-tries/2021600002
 

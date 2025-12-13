@@ -261,9 +261,7 @@ const seedDatabase = async () => {
         console.log('Creating sample cards...');
         const createdCards = [];
         for (const cardData of sampleCards) {
-            const pinSalt = crypto.randomBytes(16).toString('hex');
-            const pinHash = generatePinHash(cardData.pin, pinSalt);
-            
+            // ⚠️ PIN is no longer stored on server - must be set on card (applet) only
             const card = await Card.create({
                 studentId: cardData.studentId,
                 holderName: cardData.holderName,
@@ -271,9 +269,6 @@ const seedDatabase = async () => {
                 department: cardData.department,
                 birthDate: cardData.birthDate,
                 address: cardData.address,
-                pinHash: pinHash,
-                pinSalt: pinSalt,
-                pinTries: 3,
                 balance: cardData.balance || 0,
                 status: 'Hoạt động'
             });

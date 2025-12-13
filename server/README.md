@@ -254,9 +254,7 @@ CREATE TABLE cards (
     address VARCHAR(255) NOT NULL,
     status ENUM('Hoạt động', 'Khóa', 'Tạm khóa') DEFAULT 'Hoạt động',
     borrowed_books INT DEFAULT 0,
-    pin_hash VARCHAR(255) NOT NULL,
-    pin_salt VARCHAR(255) NOT NULL,
-    pin_tries INT DEFAULT 3,
+    -- ⚠️ PIN fields removed - PIN should only be stored on card (applet) for security
     balance BIGINT DEFAULT 0,
     image_path VARCHAR(255) DEFAULT '',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
