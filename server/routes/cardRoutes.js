@@ -8,7 +8,7 @@ router.get('/', cardController.getAllCards);
 router.get('/:studentId', cardController.getCard);
 router.put('/:studentId', cardController.updateCard);
 router.delete('/:studentId', cardController.deleteCard);
-router.patch('/:studentId/balance', cardController.updateBalance);
+router.put('/:studentId/balance', cardController.updateBalance);
 
 module.exports = router;
 

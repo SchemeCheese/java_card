@@ -53,7 +53,7 @@ exports.createCard = async (req, res) => {
             pinSalt,
             pinTries: 3,
             balance: 0,
-            borrowedBooks: 0,
+            borrowedBooksCount: 0,
             status: 'Hoạt động'
         });
 
@@ -69,7 +69,7 @@ exports.createCard = async (req, res) => {
                 address: newCard.address,
                 status: newCard.status,
                 balance: newCard.balance,
-                borrowedBooks: newCard.borrowedBooksCount
+                borrowedBooksCount: newCard.borrowedBooksCount
             }
         });
     } catch (error) {
