@@ -1,8 +1,9 @@
 {
   "info": {
-    "name": "Library Card API",
-    "description": "API cho hệ thống quản lý thẻ thư viện JavaCard",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    "name": "Library Card API - Complete Collection",
+    "description": "API collection đầy đủ cho hệ thống quản lý thẻ thư viện JavaCard",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "2.0.0"
   },
   "variable": [
     {
@@ -13,6 +14,16 @@
     {
       "key": "studentId",
       "value": "2021600001",
+      "type": "string"
+    },
+    {
+      "key": "bookId",
+      "value": "BOOK001",
+      "type": "string"
+    },
+    {
+      "key": "borrowId",
+      "value": "1",
       "type": "string"
     }
   ],
@@ -26,7 +37,8 @@
           "raw": "{{baseUrl}}/health",
           "host": ["{{baseUrl}}"],
           "path": ["health"]
-        }
+        },
+        "description": "Kiểm tra server có hoạt động không"
       }
     },
     {
@@ -44,7 +56,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"studentId\": \"2021600001\",\n  \"holderName\": \"Nguyễn Văn A\",\n  \"email\": \"nguyenvana@example.com\",\n  \"department\": \"Công nghệ thông tin\",\n  \"birthDate\": \"01/01/2000\",\n  \"address\": \"123 Đường ABC, TP.HCM\",\n  \"pin\": \"123456\"\n}"
+              "raw": "{\n  \"studentId\": \"2021600001\",\n  \"holderName\": \"Nguyễn Văn A\",\n  \"email\": \"nguyenvana@example.com\",\n  \"department\": \"Công nghệ thông tin\",\n  \"birthDate\": \"01/01/2000\",\n  \"address\": \"123 Đường ABC, TP.HCM\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/cards",
@@ -54,7 +66,7 @@
           }
         },
         {
-          "name": "Get Card by ID",
+          "name": "Get Card by Student ID",
           "request": {
             "method": "GET",
             "header": [],
@@ -71,9 +83,19 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/cards",
+              "raw": "{{baseUrl}}/cards?page=1&limit=10",
               "host": ["{{baseUrl}}"],
-              "path": ["cards"]
+              "path": ["cards"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
             }
           }
         },
@@ -89,7 +111,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"newemail@example.com\",\n  \"address\": \"Địa chỉ mới\"\n}"
+              "raw": "{\n  \"email\": \"newemail@example.com\",\n  \"address\": \"Địa chỉ mới, TP.HCM\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/cards/{{studentId}}",
@@ -101,7 +123,7 @@
         {
           "name": "Update Balance",
           "request": {
-            "method": "PATCH",
+            "method": "PUT",
             "header": [
               {
                 "key": "Content-Type",
@@ -120,6 +142,39 @@
           }
         },
         {
+          "name": "Update RSA Public Key",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rsaPublicKey\": \"-----BEGIN PUBLIC KEY-----\\nMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC...\\n-----END PUBLIC KEY-----\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/cards/{{studentId}}/rsa-key",
+              "host": ["{{baseUrl}}"],
+              "path": ["cards", "{{studentId}}", "rsa-key"]
+            }
+          }
+        },
+        {
+          "name": "Get RSA Public Key",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/cards/{{studentId}}/rsa-key",
+              "host": ["{{baseUrl}}"],
+              "path": ["cards", "{{studentId}}", "rsa-key"]
+            }
+          }
+        },
+        {
           "name": "Delete Card",
           "request": {
             "method": "DELETE",
@@ -134,78 +189,7 @@
       ]
     },
     {
-      "name": "PIN",
-      "item": [
-        {
-          "name": "Verify PIN",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"pin\": \"123456\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/pin/verify",
-              "host": ["{{baseUrl}}"],
-              "path": ["pin", "verify"]
-            }
-          }
-        },
-        {
-          "name": "Change PIN",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"oldPin\": \"123456\",\n  \"newPin\": \"654321\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/pin/change",
-              "host": ["{{baseUrl}}"],
-              "path": ["pin", "change"]
-            }
-          }
-        },
-        {
-          "name": "Get PIN Tries",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/pin/tries/{{studentId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["pin", "tries", "{{studentId}}"]
-            }
-          }
-        },
-        {
-          "name": "Reset PIN Tries",
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/pin/reset/{{studentId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["pin", "reset", "{{studentId}}"]
-            }
-          }
-        }
-      ]
-    },
-    {
-      "name": "Books",
+      "name": "Books (Borrowed)",
       "item": [
         {
           "name": "Borrow Book",
@@ -219,7 +203,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"bookId\": \"BOOK001\",\n  \"bookName\": \"Lập trình Java căn bản\",\n  \"dueDate\": \"2024-02-15\"\n}"
+              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"bookId\": \"{{bookId}}\",\n  \"bookName\": \"Lập trình Java căn bản\",\n  \"dueDate\": \"2024-12-31\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/books/borrow",
@@ -229,26 +213,251 @@
           }
         },
         {
-          "name": "Get Student Books",
+          "name": "Return Book",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/books/return/{{borrowId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["books", "return", "{{borrowId}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Borrowed Books by Student",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/books/student/{{studentId}}",
+              "raw": "{{baseUrl}}/books/student/{{studentId}}?page=1&limit=10&status=Đang mượn",
               "host": ["{{baseUrl}}"],
-              "path": ["books", "student", "{{studentId}}"]
+              "path": ["books", "student", "{{studentId}}"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "Đang mượn"
+                }
+              ]
             }
           }
         },
+        {
+          "name": "Get All Borrowed Books",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/books?page=1&limit=10&status=Đang mượn",
+              "host": ["{{baseUrl}}"],
+              "path": ["books"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "Đang mượn"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Borrowed Book Record",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/books/{{borrowId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["books", "{{borrowId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Book Inventory (Library)",
+      "item": [
         {
           "name": "Get All Books",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/books",
+              "raw": "{{baseUrl}}/library/books?page=1&limit=10&status=Có sẵn",
               "host": ["{{baseUrl}}"],
-              "path": ["books"]
+              "path": ["library", "books"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "Có sẵn"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Search Books",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/books/search?query=Java&category=Lập trình",
+              "host": ["{{baseUrl}}"],
+              "path": ["library", "books", "search"],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "Java"
+                },
+                {
+                  "key": "category",
+                  "value": "Lập trình"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Book by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/books/{{bookId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["library", "books", "{{bookId}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/books/categories",
+              "host": ["{{baseUrl}}"],
+              "path": ["library", "books", "categories"]
+            }
+          }
+        },
+        {
+          "name": "Get Book Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/books/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["library", "books", "stats"]
+            }
+          }
+        },
+        {
+          "name": "Create Book",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookId\": \"BOOK011\",\n  \"title\": \"Python Programming\",\n  \"author\": \"John Doe\",\n  \"isbn\": \"978-1-234-56789-0\",\n  \"publisher\": \"Tech Publisher\",\n  \"publishYear\": 2023,\n  \"category\": \"Lập trình\",\n  \"description\": \"Learn Python from scratch\",\n  \"totalCopies\": 5,\n  \"location\": \"Kệ A-20\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/library/books",
+              "host": ["{{baseUrl}}"],
+              "path": ["library", "books"]
+            }
+          }
+        },
+        {
+          "name": "Update Book",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"totalCopies\": 7,\n  \"location\": \"Kệ A-21\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/library/books/{{bookId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["library", "books", "{{bookId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Book Copies",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"availableCopies\": 6\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/library/books/{{bookId}}/copies",
+              "host": ["{{baseUrl}}"],
+              "path": ["library", "books", "{{bookId}}", "copies"]
+            }
+          }
+        },
+        {
+          "name": "Delete Book",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/library/books/{{bookId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["library", "books", "{{bookId}}"]
             }
           }
         }
@@ -279,19 +488,62 @@
           }
         },
         {
-          "name": "Get Student Transactions",
+          "name": "Create Transaction - Payment",
           "request": {
-            "method": "GET",
-            "header": [],
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"type\": \"Thanh toán phạt\",\n  \"amount\": -15000,\n  \"description\": \"Phạt trả sách muộn\"\n}"
+            },
             "url": {
-              "raw": "{{baseUrl}}/transactions/student/{{studentId}}",
+              "raw": "{{baseUrl}}/transactions",
               "host": ["{{baseUrl}}"],
-              "path": ["transactions", "student", "{{studentId}}"]
+              "path": ["transactions"]
             }
           }
         },
         {
-          "name": "Get Transaction Stats",
+          "name": "Get Transactions by Student",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transactions/student/{{studentId}}?page=1&limit=10&type=Nạp tiền&startDate=2024-01-01&endDate=2024-12-31",
+              "host": ["{{baseUrl}}"],
+              "path": ["transactions", "student", "{{studentId}}"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "type",
+                  "value": "Nạp tiền"
+                },
+                {
+                  "key": "startDate",
+                  "value": "2024-01-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2024-12-31"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Transaction Statistics",
           "request": {
             "method": "GET",
             "header": [],
@@ -301,11 +553,114 @@
               "path": ["transactions", "student", "{{studentId}}", "stats"]
             }
           }
+        },
+        {
+          "name": "Get Transaction by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transactions/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["transactions", "1"]
+            }
+          }
+        },
+        {
+          "name": "Get All Transactions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/transactions?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["transactions"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "PIN",
+      "item": [
+        {
+          "name": "Change PIN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentId\": \"{{studentId}}\",\n  \"oldPin\": \"123456\",\n  \"newPin\": \"654321\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pin/change",
+              "host": ["{{baseUrl}}"],
+              "path": ["pin", "change"]
+            },
+            "description": "⚠️ NOTE: PIN verification should be done on card (applet), not on server"
+          }
+        },
+        {
+          "name": "Get PIN Tries Remaining",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pin/tries/{{studentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["pin", "tries", "{{studentId}}"]
+            }
+          }
+        },
+        {
+          "name": "Reset PIN Tries",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pin/reset-tries/{{studentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["pin", "reset-tries", "{{studentId}}"]
+            }
+          }
+        },
+        {
+          "name": "Admin Reset PIN",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newPin\": \"123456\",\n  \"adminKey\": \"ADMIN_DEFAULT_KEY_CHANGE_IN_PRODUCTION\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/pin/admin/reset/{{studentId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["pin", "admin", "reset", "{{studentId}}"]
+            }
+          }
         }
       ]
     }
   ]
 }
-
-
-

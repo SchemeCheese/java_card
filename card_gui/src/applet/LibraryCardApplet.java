@@ -11,6 +11,8 @@ public class LibraryCardApplet extends Applet {
     private PinManager pinManager;
     private CardInfoManager cardInfoManager;
     private BookManager bookManager;
+    private RSAAuthenticationManager rsaAuthManager;
+    private AESEncryptionManager aesEncryptionManager;
 
     protected LibraryCardApplet() {
         // Constructor rỗng
@@ -22,6 +24,8 @@ public class LibraryCardApplet extends Applet {
         applet.pinManager = new PinManager();
         applet.cardInfoManager = new CardInfoManager();
         applet.bookManager = new BookManager();
+        applet.rsaAuthManager = new RSAAuthenticationManager();
+        applet.aesEncryptionManager = new AESEncryptionManager();
 
         if (bLength == 0 || bArray == null || bOffset >= bArray.length) {
             applet.register();
@@ -81,6 +85,49 @@ public class LibraryCardApplet extends Applet {
                 break;
             case AppletConstants.INS_RETURN_BOOK:
                 bookManager.returnBook(apdu, pinManager);
+                break;
+
+            // RSA Authentication
+            case AppletConstants.INS_RSA_GENERATE_KEYPAIR:
+                try {
+                    rsaAuthManager.generateKeyPair(apdu);
+                } catch (Exception e) {
+                    ISOException.throwIt(ISO7816.SW_UNKNOWN);
+                }
+                break;
+            case AppletConstants.INS_RSA_GET_PUBLIC_KEY:
+                try {
+                    rsaAuthManager.getPublicKey(apdu);
+                } catch (Exception e) {
+                    ISOException.throwIt(ISO7816.SW_UNKNOWN);
+                }
+                break;
+            case AppletConstants.INS_RSA_SIGN_CHALLENGE:
+                // Check if rsaAuthManager is initialized
+                if (rsaAuthManager == null) {
+                    ISOException.throwIt((short)0x6A1B); // RSA manager not initialized
+                    break;
+                }
+                try {
+                    rsaAuthManager.signChallenge(apdu);
+                } catch (ISOException e) {
+                    // Re-throw ISOException (already has proper SW code)
+                    throw e;
+                } catch (Throwable t) {
+                    // Catch any other exception/error and throw with specific code
+                    // This includes RuntimeException, Error, etc.
+                    ISOException.throwIt((short)0x6A1A); // Exception in router
+                }
+                break;
+            // AES Encryption
+            case AppletConstants.INS_AES_SET_KEY:
+                aesEncryptionManager.setAESKey(apdu, pinManager);
+                break;
+            case AppletConstants.INS_AES_ENCRYPT:
+                aesEncryptionManager.encrypt(apdu);
+                break;
+            case AppletConstants.INS_AES_DECRYPT:
+                aesEncryptionManager.decrypt(apdu);
                 break;
 
             default:

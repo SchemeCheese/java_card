@@ -1,5 +1,8 @@
 package pages;
 
+import api.ApiServiceManager;
+import api.BookApiService;
+import api.BookInventoryApiService;
 import constants.AppConstants;
 import models.BorrowedBook;
 import service.SimulatorService;
@@ -22,6 +25,9 @@ import java.util.List;
 public class BorrowedBooksPage extends JPanel {
 
     private SimulatorService simulatorService;
+    private ApiServiceManager apiManager;
+    private BookApiService bookApi;
+    private BookInventoryApiService inventoryApi;
 
     // Components cho bảng Sách Đang Mượn (Bên Trái)
     private DefaultTableModel borrowedModel;
@@ -49,6 +55,9 @@ public class BorrowedBooksPage extends JPanel {
 
     public BorrowedBooksPage(SimulatorService simulatorService) {
         this.simulatorService = simulatorService;
+        this.apiManager = ApiServiceManager.getInstance();
+        this.bookApi = apiManager.getBookApiService();
+        this.inventoryApi = apiManager.getBookInventoryApiService();
 
         setLayout(new BorderLayout());
         setBackground(AppConstants.BACKGROUND);
@@ -117,6 +126,13 @@ public class BorrowedBooksPage extends JPanel {
         // Chỉnh độ rộng cột checkbox nhỏ lại
         borrowedTable.getColumnModel().getColumn(0).setMaxWidth(40);
         borrowedTable.getColumnModel().getColumn(1).setMaxWidth(80);
+        
+        // Ẩn cột ID (index 4) - chỉ dùng để lưu borrowId
+        if (borrowedTable.getColumnCount() > 4) {
+            borrowedTable.getColumnModel().getColumn(4).setMinWidth(0);
+            borrowedTable.getColumnModel().getColumn(4).setMaxWidth(0);
+            borrowedTable.getColumnModel().getColumn(4).setWidth(0);
+        }
 
         JScrollPane scroll = new JScrollPane(borrowedTable);
         scroll.setBorder(BorderFactory.createLineBorder(AppConstants.BORDER_COLOR));
@@ -235,15 +251,32 @@ public class BorrowedBooksPage extends JPanel {
     /**
      * Nạp lại dữ liệu cho cả 2 bảng
      * Logic:
-     * - Bảng Trái: Lấy từ simulatorService.getBorrowedBooks()
-     * - Bảng Phải: Lấy từ LIBRARY_CATALOG trừ đi những cuốn đã có bên Trái
+     * - Bảng Trái: Lấy từ API hoặc simulatorService.getBorrowedBooks()
+     * - Bảng Phải: Lấy từ API hoặc LIBRARY_CATALOG trừ đi những cuốn đã có bên Trái
      */
     private void refreshData() {
         String studentCode = simulatorService.getCurrentStudentCode();
-        List<BorrowedBook> currentBorrowed = simulatorService.getBorrowedBooks(studentCode);
+        List<BorrowedBook> currentBorrowed = null;
         List<String> borrowedIDs = new ArrayList<>();
 
-        // 1. Fill Bảng Trái (Đang mượn)
+        // 1. Load borrowed books từ API hoặc SimulatorService
+        if (apiManager.isServerAvailable()) {
+            try {
+                currentBorrowed = bookApi.getBorrowedBooksByStudent(studentCode, "Đang mượn", 1, 100);
+            } catch (Exception e) {
+                System.err.println("[BorrowedBooksPage] Error loading borrowed books from API");
+                System.err.println("[BorrowedBooksPage] Student ID: " + studentCode);
+                System.err.println("[BorrowedBooksPage] Status filter: Đang mượn");
+                System.err.println("[BorrowedBooksPage] Error: " + e.getMessage());
+                System.err.println("[BorrowedBooksPage] Using fallback to SimulatorService");
+                // Fallback
+                currentBorrowed = simulatorService.getBorrowedBooks(studentCode);
+            }
+        } else {
+            currentBorrowed = simulatorService.getBorrowedBooks(studentCode);
+        }
+
+        // Fill Bảng Trái (Đang mượn)
         borrowedModel.setRowCount(0);
         if (currentBorrowed != null) {
             for (BorrowedBook b : currentBorrowed) {
@@ -252,14 +285,53 @@ public class BorrowedBooksPage extends JPanel {
                         false, // Checkbox chưa tick
                         b.getBookId(),
                         b.getBookName(),
-                        b.getDueDate()
+                        b.getDueDate(),
+                        b.getId() // Store borrowId in hidden column (index 4)
                 });
             }
             borrowedCountLabel.setText(currentBorrowed.size() + " cuốn");
         }
 
-        // 2. Fill Bảng Phải (Kho sách)
+        // 2. Load library catalog từ API hoặc LIBRARY_CATALOG
         catalogModel.setRowCount(0);
+        
+        if (apiManager.isServerAvailable()) {
+            try {
+                // Load từ API
+                List<BookInventoryApiService.BookInfo> books = inventoryApi.getAllBooks(
+                    null, "Có sẵn", null, 1, 100
+                );
+                
+                for (BookInventoryApiService.BookInfo book : books) {
+                    String id = book.getBookId();
+                    // Chỉ thêm vào kho nếu chưa bị mượn và còn sẵn
+                    if (!borrowedIDs.contains(id) && book.getAvailableCopies() > 0) {
+                        catalogModel.addRow(new Object[]{
+                                false, // Checkbox chưa tick
+                                id,
+                                book.getTitle(),
+                                book.getAuthor()
+                        });
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("[BorrowedBooksPage] Error loading catalog from API");
+                System.err.println("[BorrowedBooksPage] Filters: status=Có sẵn, page=1, limit=100");
+                System.err.println("[BorrowedBooksPage] Error: " + e.getMessage());
+                System.err.println("[BorrowedBooksPage] Using fallback to LIBRARY_CATALOG");
+                // Fallback to LIBRARY_CATALOG
+                loadCatalogFromLocal(borrowedIDs);
+            }
+        } else {
+            // Fallback to LIBRARY_CATALOG
+            loadCatalogFromLocal(borrowedIDs);
+        }
+    }
+    
+    /**
+     * Load catalog từ local LIBRARY_CATALOG
+     */
+    private void loadCatalogFromLocal(List<String> borrowedIDs) {
         for (String[] book : LIBRARY_CATALOG) {
             String id = book[0];
             // Chỉ thêm vào kho nếu chưa bị mượn
@@ -284,13 +356,42 @@ public class BorrowedBooksPage extends JPanel {
             boolean isChecked = (Boolean) catalogTable.getValueAt(i, 0);
             if (isChecked) {
                 String bookId = (String) catalogTable.getValueAt(i, 1);
-                String result = simulatorService.borrowBook(studentCode, bookId);
-
-                if (result == null) { // Thành công
-                    count++;
-                    successBooks.add(bookId);
+                String bookName = (String) catalogTable.getValueAt(i, 2);
+                
+                if (apiManager.isServerAvailable()) {
+                    try {
+                        // Mượn qua API
+                        java.util.Date dueDate = new java.util.Date(
+                            System.currentTimeMillis() + 14 * 24 * 60 * 60 * 1000L // 14 ngày
+                        );
+                        BorrowedBook borrowed = bookApi.borrowBook(studentCode, bookId, bookName, dueDate);
+                        
+                        if (borrowed != null) {
+                            count++;
+                            successBooks.add(bookId);
+                        }
+                    } catch (Exception e) {
+                        JOptionPane.showMessageDialog(this, 
+                            "Lỗi mượn sách " + bookId + ": " + e.getMessage(), 
+                            "Lỗi", JOptionPane.ERROR_MESSAGE);
+                        // Fallback to SimulatorService
+                        String result = simulatorService.borrowBook(studentCode, bookId);
+                        if (result == null) {
+                            count++;
+                            successBooks.add(bookId);
+                        } else {
+                            JOptionPane.showMessageDialog(this, result, "Lỗi mượn sách " + bookId, JOptionPane.ERROR_MESSAGE);
+                        }
+                    }
                 } else {
-                    JOptionPane.showMessageDialog(this, result, "Lỗi mượn sách " + bookId, JOptionPane.ERROR_MESSAGE);
+                    // Fallback to SimulatorService
+                    String result = simulatorService.borrowBook(studentCode, bookId);
+                    if (result == null) { // Thành công
+                        count++;
+                        successBooks.add(bookId);
+                    } else {
+                        JOptionPane.showMessageDialog(this, result, "Lỗi mượn sách " + bookId, JOptionPane.ERROR_MESSAGE);
+                    }
                 }
             }
         }
@@ -314,16 +415,71 @@ public class BorrowedBooksPage extends JPanel {
             boolean isChecked = (Boolean) borrowedTable.getValueAt(i, 0);
             if (isChecked) {
                 String bookId = (String) borrowedTable.getValueAt(i, 1);
-                String result = simulatorService.returnBook(studentCode, bookId);
-
-                if (result == null) {
-                    count++;
-                } else if (result.startsWith("FINE:")) {
-                    hasFine = true;
-                    totalFine += Long.parseLong(result.split(":")[1]);
-                    count++;
+                
+                if (apiManager.isServerAvailable()) {
+                    try {
+                        // Lấy borrowId từ cột ẩn (index 4) hoặc tìm từ API
+                        int borrowId = -1;
+                        if (borrowedTable.getColumnCount() > 4) {
+                            Object idObj = borrowedTable.getValueAt(i, 4);
+                            if (idObj != null && idObj instanceof Integer) {
+                                borrowId = (Integer) idObj;
+                            }
+                        }
+                        
+                        // Nếu không có trong table, tìm từ API
+                        if (borrowId <= 0) {
+                            List<BorrowedBook> borrowed = bookApi.getBorrowedBooksByStudent(
+                                studentCode, "Đang mượn", 1, 100
+                            );
+                            
+                            for (BorrowedBook b : borrowed) {
+                                if (b.getBookId().equals(bookId) && b.getId() > 0) {
+                                    borrowId = b.getId();
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (borrowId > 0) {
+                            BorrowedBook returned = bookApi.returnBook(borrowId);
+                            if (returned != null) {
+                                count++;
+                                if (returned.getOverdueDays() > 0) {
+                                    hasFine = true;
+                                    totalFine += returned.getOverdueDays() * 5000; // 5000 VND per day
+                                }
+                            }
+                        } else {
+                            throw new Exception("Không tìm thấy borrowId cho sách: " + bookId);
+                        }
+                    } catch (Exception e) {
+                        System.err.println("Error returning book via API: " + e.getMessage());
+                        e.printStackTrace();
+                        // Fallback to SimulatorService
+                        String result = simulatorService.returnBook(studentCode, bookId);
+                        if (result == null) {
+                            count++;
+                        } else if (result.startsWith("FINE:")) {
+                            hasFine = true;
+                            totalFine += Long.parseLong(result.split(":")[1]);
+                            count++;
+                        } else {
+                            JOptionPane.showMessageDialog(this, result, "Lỗi trả sách " + bookId, JOptionPane.ERROR_MESSAGE);
+                        }
+                    }
                 } else {
-                    JOptionPane.showMessageDialog(this, result, "Lỗi trả sách", JOptionPane.ERROR_MESSAGE);
+                    // Fallback to SimulatorService
+                    String result = simulatorService.returnBook(studentCode, bookId);
+                    if (result == null) {
+                        count++;
+                    } else if (result.startsWith("FINE:")) {
+                        hasFine = true;
+                        totalFine += Long.parseLong(result.split(":")[1]);
+                        count++;
+                    } else {
+                        JOptionPane.showMessageDialog(this, result, "Lỗi trả sách", JOptionPane.ERROR_MESSAGE);
+                    }
                 }
             }
         }

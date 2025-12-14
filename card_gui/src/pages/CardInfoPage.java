@@ -1,5 +1,8 @@
 package pages;
 
+import api.ApiServiceManager;
+import api.CardApiService;
+import com.google.gson.JsonObject;
 import constants.AppConstants;
 import models.CardInfo;
 import service.SimulatorService;
@@ -23,6 +26,8 @@ import java.util.regex.Pattern;
 public class CardInfoPage extends JPanel {
     
     private SimulatorService simulatorService;
+    private ApiServiceManager apiManager;
+    private CardApiService cardApi;
     private CardInfo cardInfo;
     
     // Editable fields
@@ -36,10 +41,11 @@ public class CardInfoPage extends JPanel {
     
     public CardInfoPage(SimulatorService simulatorService) {
         this.simulatorService = simulatorService;
+        this.apiManager = ApiServiceManager.getInstance();
+        this.cardApi = apiManager.getCardApiService();
         
-        // Lấy thông tin thẻ của sinh viên hiện tại
-        String currentStudentCode = simulatorService.getCurrentStudentCode();
-        this.cardInfo = simulatorService.getCardByStudentCode(currentStudentCode);
+        // Load card info từ API hoặc SimulatorService
+        loadCardInfo();
         
         setLayout(new BorderLayout());
         setBackground(AppConstants.BACKGROUND);
@@ -69,6 +75,30 @@ public class CardInfoPage extends JPanel {
         
         wrapper.add(mainCard);
         add(wrapper, BorderLayout.CENTER);
+    }
+    
+    /**
+     * Load card info từ API hoặc SimulatorService
+     */
+    private void loadCardInfo() {
+        String currentStudentCode = simulatorService.getCurrentStudentCode();
+        
+        if (apiManager.isServerAvailable()) {
+            try {
+                // Load từ API
+                CardInfo card = cardApi.getCard(currentStudentCode);
+                if (card != null) {
+                    this.cardInfo = card;
+                    return;
+                }
+            } catch (Exception e) {
+                System.err.println("Error loading card from API: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+        
+        // Fallback về SimulatorService
+        this.cardInfo = simulatorService.getCardByStudentCode(currentStudentCode);
     }
     
     private JPanel createHeader() {
@@ -744,9 +774,41 @@ public class CardInfoPage extends JPanel {
         }
         // Image path is already saved when uploaded, no need to update here
         
-        // Save to service
+        // Save to API hoặc SimulatorService
         try {
             String studentCode = simulatorService.getCurrentStudentCode();
+            
+            if (apiManager.isServerAvailable()) {
+                try {
+                    // Lưu qua API
+                    JsonObject updates = new JsonObject();
+                    updates.addProperty("holderName", holderName);
+                    if (!birthDate.isEmpty()) {
+                        updates.addProperty("birthDate", birthDate);
+                    }
+                    if (!address.isEmpty()) {
+                        updates.addProperty("address", address);
+                    }
+                    
+                    CardInfo updated = cardApi.updateCard(studentCode, updates);
+                    if (updated != null) {
+                        this.cardInfo = updated;
+                        // Refresh avatar display
+                        if (avatarLabel != null) {
+                            avatarLabel.repaint();
+                        }
+                        JOptionPane.showMessageDialog(this,
+                            "Đã lưu thông tin thành công!",
+                            "Thành công", JOptionPane.INFORMATION_MESSAGE);
+                        return;
+                    }
+                } catch (Exception apiEx) {
+                    System.err.println("Error saving to API: " + apiEx.getMessage());
+                    // Fallback to SimulatorService
+                }
+            }
+            
+            // Fallback về SimulatorService
             if (simulatorService.isConnected() && simulatorService.isPinVerified()) {
                 boolean saved = simulatorService.setCardInfo(cardInfo);
                 if (saved) {

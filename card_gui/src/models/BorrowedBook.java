@@ -4,6 +4,7 @@ package models;
  * Model class for borrowed book information
  */
 public class BorrowedBook {
+    private int id; // Borrow record ID (from database)
     private String bookId;
     private String bookName;
     private String borrowDate;
@@ -12,6 +13,17 @@ public class BorrowedBook {
     private int overdueDays;
 
     public BorrowedBook(String bookId, String bookName, String borrowDate, String dueDate, String status, int overdueDays) {
+        this.id = 0; // Default, will be set from API
+        this.bookId = bookId;
+        this.bookName = bookName;
+        this.borrowDate = borrowDate;
+        this.dueDate = dueDate;
+        this.status = status;
+        this.overdueDays = overdueDays;
+    }
+    
+    public BorrowedBook(int id, String bookId, String bookName, String borrowDate, String dueDate, String status, int overdueDays) {
+        this.id = id;
         this.bookId = bookId;
         this.bookName = bookName;
         this.borrowDate = borrowDate;
@@ -66,5 +78,13 @@ public class BorrowedBook {
 
     public void setOverdueDays(int overdueDays) {
         this.overdueDays = overdueDays;
+    }
+    
+    public int getId() {
+        return id;
+    }
+    
+    public void setId(int id) {
+        this.id = id;
     }
 }

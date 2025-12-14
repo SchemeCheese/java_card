@@ -12,11 +12,16 @@ import java.util.concurrent.TimeUnit;
  */
 public class ApiClient {
     private static final String BASE_URL = "http://localhost:3000/api";
-    private static final int CONNECT_TIMEOUT = 10;
-    private static final int READ_TIMEOUT = 30;
+    private static final int CONNECT_TIMEOUT = 2;  // 2s đủ cho local connection
+    private static final int READ_TIMEOUT = 5;      // 5s cho local API với MySQL (đủ cho queries phức tạp)
     
     private final OkHttpClient client;
     private final Gson gson;
+    
+    // Cache server availability để tránh gọi nhiều lần
+    private Boolean cachedServerAvailable = null;
+    private long lastCheckTime = 0;
+    private static final long CACHE_DURATION_MS = 5000; // Cache 5 giây
     
     public ApiClient() {
         this.client = new OkHttpClient.Builder()
@@ -92,6 +97,24 @@ public class ApiClient {
     }
     
     /**
+     * PATCH request
+     */
+    public ApiResponse patch(String endpoint, Object body) throws IOException {
+        String jsonBody = gson.toJson(body);
+        RequestBody requestBody = RequestBody.create(
+                MediaType.parse("application/json; charset=utf-8"),
+                jsonBody
+        );
+        
+        Request request = new Request.Builder()
+                .url(BASE_URL + endpoint)
+                .patch(requestBody)
+                .build();
+        
+        return executeRequest(request);
+    }
+    
+    /**
      * DELETE request
      */
     public ApiResponse delete(String endpoint) throws IOException {
@@ -130,14 +153,43 @@ public class ApiClient {
     
     /**
      * Check if server is available
+     * Cached để tránh gọi nhiều lần trong thời gian ngắn
      */
     public boolean isServerAvailable() {
+        long currentTime = System.currentTimeMillis();
+        
+        // Nếu có cache và chưa hết hạn, dùng cache
+        if (cachedServerAvailable != null && (currentTime - lastCheckTime) < CACHE_DURATION_MS) {
+            return cachedServerAvailable;
+        }
+        
+        // Check server
         try {
+            System.out.println("[ApiClient] Checking server availability at " + BASE_URL + "/health");
             ApiResponse response = get("/health");
-            return response.isSuccess();
+            boolean available = response.isSuccess();
+            System.out.println("[ApiClient] Server available: " + available + " (status: " + response.getStatusCode() + ")");
+            
+            // Cache kết quả
+            cachedServerAvailable = available;
+            lastCheckTime = currentTime;
+            return available;
         } catch (Exception e) {
+            System.err.println("[ApiClient] Server not available: " + e.getMessage());
+            
+            // Cache kết quả false
+            cachedServerAvailable = false;
+            lastCheckTime = currentTime;
             return false;
         }
+    }
+    
+    /**
+     * Clear cache (dùng khi muốn force check lại)
+     */
+    public void clearServerAvailabilityCache() {
+        cachedServerAvailable = null;
+        lastCheckTime = 0;
     }
     
     /**

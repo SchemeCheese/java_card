@@ -1,10 +1,13 @@
 package pages;
 
+import api.ApiServiceManager;
+import api.CardApiService;
 import applet.AppletConstants;
 import constants.AppConstants;
 import service.SimulatorService;
 import ui.RoundedBorder;
 import ui.UIComponentFactory;
+import utils.RSAUtility;
 
 import javax.swing.*;
 import javax.swing.border.*;
@@ -24,6 +27,8 @@ public class PinPage extends JPanel {
     private static final Color LIGHT_GRAY_BG = new Color(249, 250, 251);
 
     private SimulatorService simulatorService;
+    private ApiServiceManager apiManager;
+    private CardApiService cardApi;
     private JLabel statusLabel;
     private JLabel triesLabel;
 
@@ -41,6 +46,8 @@ public class PinPage extends JPanel {
 
     public PinPage(SimulatorService simulatorService) {
         this.simulatorService = simulatorService;
+        this.apiManager = ApiServiceManager.getInstance();
+        this.cardApi = apiManager.getCardApiService();
 
         setLayout(new BorderLayout());
         setBackground(AppConstants.BACKGROUND);
@@ -424,6 +431,45 @@ public class PinPage extends JPanel {
             return;
         }
 
+        // Auto-connect if not connected (after logout)
+        if (!simulatorService.isConnected()) {
+            try {
+                simulatorService.connect();
+                
+                // Special handling for Admin CT060132 - always ensure PIN "000000" exists
+                boolean isAdmin = AppletConstants.ADMIN_STUDENT_CODE.equalsIgnoreCase(studentCode);
+                if (isAdmin) {
+                    // For admin, always ensure default PIN "000000" exists
+                    try {
+                        simulatorService.createDemoPin();
+                        System.out.println("Admin PIN (000000) ensured on card");
+                    } catch (Exception ex) {
+                        // PIN might already exist, ignore
+                        System.out.println("Admin PIN might already exist: " + ex.getMessage());
+                    }
+                } else {
+                    // For students, restore from JSON if available
+                    // [REMOVED] restoreCardState - No longer used
+                    boolean stateRestored = false;
+                    
+                    // Only create default PIN if state was NOT restored (no saved PIN)
+                    // If state was restored, PIN should already be on the card
+                    if (!stateRestored) {
+                        try {
+                            simulatorService.createDemoPin();
+                        } catch (Exception ex) {
+                            // PIN might already exist, ignore
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this,
+                    "Không thể kết nối với thẻ!\n" + ex.getMessage(),
+                    "Lỗi kết nối", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+        }
+
         String pinStr = new String(pin);
         boolean isAdmin = AppletConstants.ADMIN_STUDENT_CODE.equalsIgnoreCase(studentCode);
 
@@ -449,6 +495,132 @@ public class PinPage extends JPanel {
             if (success) {
                 simulatorService.setCurrentRole("normal");
                 simulatorService.setPinVerified(true);
+                
+                // RSA Authentication - Auto-generate if not exists on first login
+                boolean rsaKeyJustGenerated = false; // Flag to track if we just generated RSA keypair
+                try {
+                    if (simulatorService.isConnected()) {
+                        // Check if RSA keypair exists on card (required for signing)
+                        // Also check server for verification (optional)
+                        boolean hasRSAKeyOnCard = false;
+                        boolean hasRSAKeyOnServer = false;
+                        
+                        // Check card first (this is the source of truth for authentication)
+                        try {
+                            byte[] publicKeyData = simulatorService.getRSAPublicKey();
+                            hasRSAKeyOnCard = (publicKeyData != null && publicKeyData.length > 0);
+                            if (hasRSAKeyOnCard) {
+                                System.out.println("RSA keypair found on card");
+                            }
+                        } catch (Exception cardCheckEx) {
+                            hasRSAKeyOnCard = false;
+                            System.out.println("RSA keypair check on card failed: " + cardCheckEx.getMessage());
+                        }
+                        
+                        // Check server (for verification, optional)
+                        if (apiManager != null && apiManager.isServerAvailable()) {
+                            try {
+                                models.CardInfo serverCard = cardApi.getCard(studentCode);
+                                if (serverCard != null && serverCard.getRsaPublicKey() != null && !serverCard.getRsaPublicKey().isEmpty()) {
+                                    hasRSAKeyOnServer = true;
+                                    System.out.println("RSA public key found on server");
+                                }
+                            } catch (Exception serverEx) {
+                                // Server error
+                            }
+                        }
+                        
+                        // Only authenticate if keypair exists on CARD (required for signing)
+                        // Server key is optional but recommended for verification
+                        boolean hasRSAKey = hasRSAKeyOnCard;
+                        
+                        if (hasRSAKeyOnCard && !hasRSAKeyOnServer) {
+                            System.out.println("Warning: RSA keypair exists on card but not on server - will use card's key for verification");
+                        }
+                        
+                        if (!hasRSAKey) {
+                            // No RSA keypair yet - auto-generate on first login
+                            try {
+                                System.out.println("RSA keypair not found - generating on first login for: " + studentCode);
+                                byte[] publicKeyData = simulatorService.generateRSAKeyPair();
+                                if (publicKeyData != null) {
+                                    // Extract modulus and exponent
+                                    byte[] modulus = new byte[applet.AppletConstants.RSA_MODULUS_SIZE];
+                                    byte[] exponent = new byte[3];
+                                    System.arraycopy(publicKeyData, 0, modulus, 0, modulus.length);
+                                    System.arraycopy(publicKeyData, modulus.length, exponent, 0, exponent.length);
+                                    
+                                    // Convert to PEM format
+                                    String publicKeyPEM = utils.RSAUtility.convertToPEM(modulus, exponent);
+                                    
+                                    // Save to server if available
+                                    if (apiManager != null && apiManager.isServerAvailable()) {
+                                        try {
+                                            cardApi.updateRSAPublicKey(studentCode, publicKeyPEM);
+                                            System.out.println("RSA public key saved to server");
+                                        } catch (Exception apiEx) {
+                                            System.out.println("Could not save RSA key to server: " + apiEx.getMessage());
+                                        }
+                                    }
+                                    
+                                    // Save to CardInfo for later use
+                                    models.CardInfo cardInfo = simulatorService.getCardByStudentCode(studentCode);
+                                    if (cardInfo != null) {
+                                        cardInfo.setRsaPublicKey(publicKeyPEM);
+                                    }
+                                    
+                                    System.out.println("RSA keypair generated successfully on first login");
+                                    rsaKeyJustGenerated = true; // Mark that we just generated
+                                    // Skip authentication for first login - will authenticate on next login
+                                }
+                            } catch (Exception genEx) {
+                                System.out.println("Could not generate RSA keypair: " + genEx.getMessage());
+                                // Continue - RSA is optional
+                            }
+                        }
+                        
+                        // Only authenticate if keypair existed BEFORE we checked (not just generated)
+                        // CRITICAL: Use original hasRSAKey value, not re-check after generation
+                        if (hasRSAKey && !rsaKeyJustGenerated) {
+                            // RSA keypair exists - authenticate
+                            try {
+                                System.out.println("[RSA AUTH] Starting RSA authentication for student: " + studentCode);
+                                boolean rsaAuthenticated = authenticateCardWithRSA(studentCode);
+                                if (rsaAuthenticated) {
+                                    System.out.println("[RSA AUTH] ✓ Authentication successful for student: " + studentCode);
+                                } else {
+                                    // Keypair exists but verification failed - possible fake card
+                                    System.out.println("[RSA AUTH] ✗ Authentication FAILED for student: " + studentCode);
+                                    System.out.println("[RSA AUTH] Possible reasons:");
+                                    System.out.println("  - Signature verification failed (wrong private key)");
+                                    System.out.println("  - Signing error on card (check logs above for error code)");
+                                    System.out.println("  - Keypair mismatch between card and server");
+                                    // Show warning but allow login (RSA is additional security layer)
+                                    JOptionPane.showMessageDialog(this,
+                                        "Cảnh báo: Xác thực RSA thất bại. Thẻ có thể bị giả mạo.\n" +
+                                        "Bạn vẫn có thể đăng nhập, nhưng hãy kiểm tra lại thẻ.\n\n" +
+                                        "Xem console log để biết chi tiết lỗi.",
+                                        "Cảnh báo bảo mật", JOptionPane.WARNING_MESSAGE);
+                                }
+                            } catch (Exception authEx) {
+                                // Catch authentication errors separately to avoid confusion
+                                System.out.println("[RSA AUTH] ✗ Exception during authentication for student: " + studentCode);
+                                System.out.println("[RSA AUTH] Exception type: " + authEx.getClass().getName());
+                                System.out.println("[RSA AUTH] Exception message: " + authEx.getMessage());
+                                if (authEx.getCause() != null) {
+                                    System.out.println("[RSA AUTH] Caused by: " + authEx.getCause().getMessage());
+                                }
+                                authEx.printStackTrace();
+                                // Don't block login for RSA errors - just log
+                            }
+                        } else if (rsaKeyJustGenerated) {
+                            System.out.println("[RSA AUTH] Skipping RSA authentication after keypair generation (first login)");
+                        }
+                    }
+                } catch (Exception rsaEx) {
+                    // RSA authentication is optional, continue anyway
+                    System.out.println("RSA authentication error: " + rsaEx.getMessage());
+                }
 
                 if (AppletConstants.DEFAULT_PIN.equals(pinStr)) {
                     setForceChangePinState();
@@ -473,12 +645,56 @@ public class PinPage extends JPanel {
                 }
             }
         } else {
-            // Admin logic
+            // Admin logic - CT060132 is fixed admin account
             try {
-                boolean success = simulatorService.verifyPin(pin);
+                // For admin, always accept PIN "000000" even if card verification fails
+                // This ensures admin can always login
+                boolean success = false;
+                
+                // Try to verify on card first
+                try {
+                    success = simulatorService.verifyPin(pin);
+                } catch (Exception verifyEx) {
+                    System.out.println("Card PIN verification failed: " + verifyEx.getMessage());
+                }
+                
+                // If card verification failed but PIN is "000000", accept it anyway (admin fallback)
+                if (!success && AppletConstants.DEFAULT_PIN.equals(pinStr)) {
+                    System.out.println("Admin PIN verification failed on card, but accepting default PIN (000000) as fallback");
+                    // Ensure PIN exists on card for next time
+                    try {
+                        simulatorService.createDemoPin();
+                    } catch (Exception createEx) {
+                        // Ignore - PIN might already exist
+                    }
+                    success = true;
+                }
+                
                 if (success) {
                     simulatorService.setCurrentStudentCode(studentCode);
                     simulatorService.setCurrentRole("Admin");
+                    simulatorService.setPinVerified(true);
+                    
+                    // RSA Authentication (optional for admin)
+                    try {
+                        if (simulatorService.isConnected()) {
+                            boolean hasRSAKey = checkRSAKeyExists(studentCode);
+                            if (hasRSAKey) {
+                                boolean rsaAuthenticated = authenticateCardWithRSA(studentCode);
+                                if (rsaAuthenticated) {
+                                    System.out.println("RSA authentication successful for admin");
+                                } else {
+                                    System.out.println("RSA authentication failed for admin");
+                                }
+                            } else {
+                                System.out.println("RSA keypair not found for admin - skipping authentication");
+                            }
+                        }
+                    } catch (Exception rsaEx) {
+                        // RSA authentication is optional, continue anyway
+                        System.out.println("RSA authentication error: " + rsaEx.getMessage());
+                    }
+                    
                     setVerifiedState();
                     JOptionPane.showMessageDialog(this, "Đăng nhập Admin thành công!", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
                 } else {
@@ -539,29 +755,204 @@ public class PinPage extends JPanel {
                 JOptionPane.showMessageDialog(this, "Lỗi: " + ex.getMessage(), "Lỗi hệ thống", JOptionPane.ERROR_MESSAGE);
             }
         } else {
-            boolean success = simulatorService.changeStudentPin(currentStudentCode, oldPinStr, newPinStr);
-            if (success) {
-                JOptionPane.showMessageDialog(this, "Đổi PIN thành công!\nVui lòng đăng nhập lại với PIN mới.", "Thành công", JOptionPane.INFORMATION_MESSAGE);
-                clearPinFields();
-                setUnverifiedState();
-            } else {
-                JOptionPane.showMessageDialog(this, "PIN cũ không đúng!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            // Student: Verify PIN cũ trên thẻ trước
+            try {
+                boolean verified = simulatorService.verifyPin(oldPinStr.toCharArray());
+                if (!verified) {
+                    JOptionPane.showMessageDialog(this, "PIN cũ không đúng!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                
+                // Đổi PIN trên thẻ
+                boolean success = simulatorService.changeStudentPin(currentStudentCode, oldPinStr, newPinStr);
+                if (success) {
+                    JOptionPane.showMessageDialog(this, 
+                        "Đổi PIN thành công!\nVui lòng đăng nhập lại với PIN mới.", 
+                        "Thành công", JOptionPane.INFORMATION_MESSAGE);
+                    clearPinFields();
+                    setUnverifiedState();
+                } else {
+                    JOptionPane.showMessageDialog(this, 
+                        "Không thể đổi PIN. Vui lòng thử lại.", 
+                        "Lỗi", JOptionPane.ERROR_MESSAGE);
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, 
+                    "Lỗi khi đổi PIN: " + ex.getMessage(), 
+                    "Lỗi hệ thống", JOptionPane.ERROR_MESSAGE);
             }
         }
     }
 
+    /**
+     * Check if RSA keypair exists on card or server
+     */
+    private boolean checkRSAKeyExists(String studentCode) {
+        try {
+            // Check server first
+            if (apiManager != null && apiManager.isServerAvailable()) {
+                try {
+                    models.CardInfo card = cardApi.getCard(studentCode);
+                    if (card != null && card.getRsaPublicKey() != null && !card.getRsaPublicKey().isEmpty()) {
+                        return true; // RSA key exists on server
+                    }
+                } catch (Exception e) {
+                    // Server error, check card directly
+                }
+            }
+            
+            // Check card directly
+            if (simulatorService.isConnected()) {
+                try {
+                    byte[] publicKeyData = simulatorService.getRSAPublicKey();
+                    return publicKeyData != null && publicKeyData.length > 0;
+                } catch (Exception e) {
+                    // No RSA keypair on card
+                    return false;
+                }
+            }
+        } catch (Exception e) {
+            // Error checking - assume no key
+        }
+        return false;
+    }
+    
+    /**
+     * Authenticate card with RSA challenge-response
+     * NOTE: This method should NOT be called immediately after generating RSA keypair
+     * because the card may not be ready to sign challenges yet (error 6700)
+     */
+    private boolean authenticateCardWithRSA(String studentCode) {
+        try {
+            // Verify keypair exists and is ready before attempting authentication
+            if (!simulatorService.isConnected()) {
+                return false;
+            }
+            
+            // First, verify keypair exists on card
+            try {
+                byte[] testKey = simulatorService.getRSAPublicKey();
+                if (testKey == null || testKey.length == 0) {
+                    System.out.println("RSA keypair not found on card for authentication");
+                    return false;
+                }
+            } catch (Exception keyCheckEx) {
+                System.out.println("RSA keypair check failed: " + keyCheckEx.getMessage());
+                return false;
+            }
+            
+            // Get RSA public key from server
+            if (apiManager != null && apiManager.isServerAvailable()) {
+                try {
+                    System.out.println("[RSA AUTH] Fetching public key from server for student: " + studentCode);
+                    models.CardInfo card = cardApi.getCard(studentCode);
+                    if (card != null && card.getRsaPublicKey() != null && !card.getRsaPublicKey().isEmpty()) {
+                        // Use public key from server
+                        String publicKeyPEM = card.getRsaPublicKey();
+                        System.out.println("[RSA AUTH] Using public key from server (length: " + publicKeyPEM.length() + " chars)");
+                        return simulatorService.authenticateCardWithRSA(publicKeyPEM);
+                    } else {
+                        System.out.println("[RSA AUTH] No public key found on server for student: " + studentCode);
+                    }
+                } catch (Exception e) {
+                    System.out.println("[RSA AUTH] Error getting RSA public key from server: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            } else {
+                System.out.println("[RSA AUTH] Server not available, using card's public key");
+            }
+            
+            // Fallback: Get public key directly from card
+            // NOTE: This fallback should NOT be called if RSA keypair was just generated
+            // because the card may not be ready to sign challenges yet
+            // This method should only be called when keypair existed before
+            try {
+                System.out.println("[RSA AUTH] Getting public key directly from card");
+                byte[] publicKeyData = simulatorService.getRSAPublicKey();
+                if (publicKeyData != null && publicKeyData.length > 0) {
+                    System.out.println("[RSA AUTH] Public key data length: " + publicKeyData.length);
+                    // Extract modulus and exponent
+                    byte[] modulus = new byte[applet.AppletConstants.RSA_MODULUS_SIZE];
+                    byte[] exponent = new byte[3];
+                    System.arraycopy(publicKeyData, 0, modulus, 0, modulus.length);
+                    System.arraycopy(publicKeyData, modulus.length, exponent, 0, exponent.length);
+                    
+                    System.out.println("[RSA AUTH] Modulus length: " + modulus.length);
+                    System.out.println("[RSA AUTH] Exponent length: " + exponent.length);
+                    
+                    // Convert to PublicKey and authenticate
+                    java.security.PublicKey publicKey = utils.RSAUtility.convertToPublicKey(modulus, exponent);
+                    byte[] challenge = utils.RSAUtility.generateChallenge();
+                    System.out.println("[RSA AUTH] Generated challenge: " + utils.RSAUtility.bytesToHex(challenge));
+                    
+                    // Try to sign challenge - catch 6700 error specifically
+                    byte[] signature;
+                    try {
+                        signature = simulatorService.signRSAChallenge(challenge);
+                    } catch (Exception signEx) {
+                        // 6700 error means keypair may not be ready
+                        String errorMsg = signEx.getMessage();
+                        System.out.println("[RSA AUTH] Signing failed for student: " + studentCode);
+                        System.out.println("[RSA AUTH] Error message: " + errorMsg);
+                        if (errorMsg != null && errorMsg.contains("6700")) {
+                            System.out.println("[RSA AUTH] Keypair not ready for signing (6700) - skipping authentication");
+                            return false;
+                        }
+                        // For other errors, also return false instead of throwing
+                        System.out.println("[RSA AUTH] Signing error details: " + errorMsg);
+                        return false;
+                    }
+                    
+                    // Verify signature
+                    boolean verified = utils.RSAUtility.verifySignature(publicKey, challenge, signature);
+                    if (!verified) {
+                        System.out.println("[RSA AUTH] Signature verification failed for student: " + studentCode);
+                        System.out.println("[RSA AUTH] Challenge: " + utils.RSAUtility.bytesToHex(challenge));
+                        System.out.println("[RSA AUTH] Signature length: " + (signature != null ? signature.length : 0));
+                    } else {
+                        System.out.println("[RSA AUTH] Signature verification successful for student: " + studentCode);
+                    }
+                    return verified;
+                }
+            } catch (Exception cardEx) {
+                // If signing fails (e.g., 6700 error), it might be because keypair was just generated
+                // or card is not ready - return false silently
+                String errorMsg = cardEx.getMessage();
+                System.out.println("[RSA AUTH] Exception in card authentication fallback:");
+                System.out.println("[RSA AUTH] Exception type: " + cardEx.getClass().getName());
+                System.out.println("[RSA AUTH] Exception message: " + errorMsg);
+                if (errorMsg != null && errorMsg.contains("6700")) {
+                    System.out.println("[RSA AUTH] Keypair not ready (6700) - card may need initialization");
+                } else {
+                    System.out.println("[RSA AUTH] Authentication from card failed - check logs above for details");
+                }
+                cardEx.printStackTrace();
+                return false;
+            }
+            
+            return false;
+        } catch (Exception e) {
+            System.out.println("Error in authenticateCardWithRSA: " + e.getMessage());
+            // Don't print stack trace for expected errors (e.g., 6700 after key generation)
+            return false;
+        }
+    }
+    
     private void handleLogout() {
         if (simulatorService != null) {
-            simulatorService.setPinVerified(false);
-            simulatorService.setCurrentStudentCode("");
-            simulatorService.setCurrentRole("normal");
+            // Disconnect from card and reset all state
+            simulatorService.disconnect();
         }
         setUnverifiedState();
         studentCodeField.setText("Nhập MSSV của bạn");
         studentCodeField.setForeground(Color.GRAY);
         studentCodeField.setEnabled(true);
         clearPinFields();
-        JOptionPane.showMessageDialog(this, "Đã đăng xuất thành công!", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+        JOptionPane.showMessageDialog(this, 
+            "Đã đăng xuất thành công!\n" +
+            "Kết nối với thẻ đã được ngắt.\n" +
+            "Vui lòng kết nối lại khi đăng nhập lần sau.",
+            "Thông báo", JOptionPane.INFORMATION_MESSAGE);
     }
 
     // --- MODERN POPUP UNLOCK ---

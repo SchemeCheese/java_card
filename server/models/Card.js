@@ -20,20 +20,24 @@ const Card = sequelize.define('Card', {
     },
     email: {
         type: DataTypes.STRING(100),
-        allowNull: false
+        allowNull: true,
+        defaultValue: ''
     },
     department: {
         type: DataTypes.STRING(100),
-        allowNull: false
+        allowNull: true,
+        defaultValue: ''
     },
     birthDate: {
         type: DataTypes.STRING(10),
-        allowNull: false,
+        allowNull: true,
+        defaultValue: '',
         field: 'birth_date'
     },
     address: {
         type: DataTypes.STRING(255),
-        allowNull: false
+        allowNull: true,
+        defaultValue: ''
     },
     status: {
         type: DataTypes.ENUM('Hoạt động', 'Khóa', 'Tạm khóa'),
@@ -44,21 +48,8 @@ const Card = sequelize.define('Card', {
         defaultValue: 0,
         field: 'borrowed_books'
     },
-    pinHash: {
-        type: DataTypes.STRING(255),
-        allowNull: false,
-        field: 'pin_hash'
-    },
-    pinSalt: {
-        type: DataTypes.STRING(255),
-        allowNull: false,
-        field: 'pin_salt'
-    },
-    pinTries: {
-        type: DataTypes.INTEGER,
-        defaultValue: 3,
-        field: 'pin_tries'
-    },
+    // ⚠️ PIN fields removed - PIN should only be stored on card (applet) for security
+    // PIN verification must be done on card, not on server
     balance: {
         type: DataTypes.BIGINT,
         defaultValue: 0
@@ -67,7 +58,19 @@ const Card = sequelize.define('Card', {
         type: DataTypes.STRING(255),
         defaultValue: '',
         field: 'image_path'
+    },
+    rsaPublicKey: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'rsa_public_key',
+        comment: 'RSA Public Key (PEM format) for card authentication'
+    },
+    rsaKeyCreatedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'rsa_key_created_at'
     }
+    // aesMasterKeyHash removed - not used in application (no comma needed - last field before closing brace)
 }, {
     tableName: 'cards',
     timestamps: true,

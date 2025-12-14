@@ -7,6 +7,34 @@ const generatePinHash = (pin, salt) => {
     return crypto.pbkdf2Sync(pin, salt, 10000, 32, 'sha256').toString('hex');
 };
 
+// Helper function to convert RSA key from JavaCard format (modulus + exponent) to PEM
+const convertRSAPublicKeyToPEM = (modulusHex, exponentHex) => {
+    try {
+        // Convert hex strings to Buffer
+        const modulus = Buffer.from(modulusHex, 'hex');
+        const exponent = Buffer.from(exponentHex, 'hex');
+        
+        // Create RSA public key object
+        const publicKey = crypto.createPublicKey({
+            key: {
+                kty: 'RSA',
+                n: modulus.toString('base64url'),
+                e: exponent.toString('base64url')
+            },
+            format: 'jwk'
+        });
+        
+        // Export as PEM
+        return publicKey.export({
+            type: 'spki',
+            format: 'pem'
+        });
+    } catch (error) {
+        console.error('Error converting RSA key:', error);
+        return null;
+    }
+};
+
 // Create a new card
 exports.createCard = async (req, res) => {
     try {
@@ -17,14 +45,16 @@ exports.createCard = async (req, res) => {
             department,
             birthDate,
             address,
-            pin
+            rsaPublicKey,
+            rsaModulus,
+            rsaExponent
         } = req.body;
 
-        // Validate required fields
-        if (!studentId || !holderName || !email || !department || !birthDate || !address || !pin) {
+        // Validate required fields - chỉ cần studentId và holderName
+        if (!studentId || !holderName) {
             return res.status(400).json({
                 success: false,
-                message: 'Vui lòng cung cấp đầy đủ thông tin'
+                message: 'Vui lòng cung cấp MSSV và Họ tên'
             });
         }
 
@@ -37,24 +67,29 @@ exports.createCard = async (req, res) => {
             });
         }
 
-        // Generate salt and hash PIN
-        const pinSalt = crypto.randomBytes(16).toString('hex');
-        const pinHash = generatePinHash(pin, pinSalt);
+        // ⚠️ PIN is no longer stored on server - must be set on card (applet) only
+        // PIN verification must be done on card for security
+        // ⚠️ email, department, birthDate, address are optional - stored on card (applet) via AES encryption
 
-        // Create new card
+        // Convert RSA key if provided in JavaCard format (modulus + exponent)
+        let rsaPublicKeyPEM = rsaPublicKey;
+        if (rsaModulus && rsaExponent && !rsaPublicKey) {
+            rsaPublicKeyPEM = convertRSAPublicKeyToPEM(rsaModulus, rsaExponent);
+        }
+
+        // Create new card - chỉ lưu studentId và holderName, các trường khác là optional
         const newCard = await Card.create({
             studentId,
             holderName,
-            email,
-            department,
-            birthDate,
-            address,
-            pinHash,
-            pinSalt,
-            pinTries: 3,
+            email: email || '',
+            department: department || '',
+            birthDate: birthDate || '',
+            address: address || '',
             balance: 0,
             borrowedBooksCount: 0,
-            status: 'Hoạt động'
+            status: 'Hoạt động',
+            rsaPublicKey: rsaPublicKeyPEM,
+            rsaKeyCreatedAt: rsaPublicKeyPEM ? new Date() : null
         });
 
         res.status(201).json({
@@ -69,7 +104,8 @@ exports.createCard = async (req, res) => {
                 address: newCard.address,
                 status: newCard.status,
                 balance: newCard.balance,
-                borrowedBooksCount: newCard.borrowedBooksCount
+                borrowedBooksCount: newCard.borrowedBooksCount,
+                hasRSAKey: !!newCard.rsaPublicKey
             }
         });
     } catch (error) {
@@ -88,8 +124,7 @@ exports.getCard = async (req, res) => {
         const { studentId } = req.params;
 
         const card = await Card.findOne({ 
-            where: { studentId },
-            attributes: { exclude: ['pinHash', 'pinSalt'] }
+            where: { studentId }
         });
         
         if (!card) {
@@ -122,7 +157,6 @@ exports.getAllCards = async (req, res) => {
         });
 
         const result = await Card.findAndCountAll({
-            attributes: { exclude: ['pinHash', 'pinSalt'] },
             order: [[sequelize.col('created_at'), 'DESC']],
             limit,
             offset
@@ -145,10 +179,7 @@ exports.updateCard = async (req, res) => {
         const { studentId } = req.params;
         const updates = req.body;
 
-        // Don't allow direct PIN updates through this endpoint
-        delete updates.pinHash;
-        delete updates.pinSalt;
-        delete updates.pinTries;
+        // ⚠️ PIN fields no longer exist - PIN is stored on card only
 
         const [updated] = await Card.update(updates, {
             where: { studentId }
@@ -162,8 +193,7 @@ exports.updateCard = async (req, res) => {
         }
 
         const card = await Card.findOne({ 
-            where: { studentId },
-            attributes: { exclude: ['pinHash', 'pinSalt'] }
+            where: { studentId }
         });
 
         res.json({
@@ -249,6 +279,98 @@ exports.updateBalance = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Lỗi khi cập nhật số dư',
+            error: error.message
+        });
+    }
+};
+
+// Update RSA public key for a card
+exports.updateRSAPublicKey = async (req, res) => {
+    try {
+        const { studentId } = req.params;
+        const { rsaPublicKey, rsaModulus, rsaExponent } = req.body;
+
+        const card = await Card.findOne({ where: { studentId } });
+        
+        if (!card) {
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy thẻ'
+            });
+        }
+
+        // Convert RSA key if provided in JavaCard format
+        let rsaPublicKeyPEM = rsaPublicKey;
+        if (rsaModulus && rsaExponent && !rsaPublicKey) {
+            rsaPublicKeyPEM = convertRSAPublicKeyToPEM(rsaModulus, rsaExponent);
+        }
+
+        if (!rsaPublicKeyPEM) {
+            return res.status(400).json({
+                success: false,
+                message: 'Không thể chuyển đổi khóa RSA'
+            });
+        }
+
+        card.rsaPublicKey = rsaPublicKeyPEM;
+        card.rsaKeyCreatedAt = new Date();
+        await card.save();
+
+        res.json({
+            success: true,
+            message: 'Cập nhật khóa RSA thành công',
+            data: {
+                studentId: card.studentId,
+                hasRSAKey: true
+            }
+        });
+    } catch (error) {
+        console.error('Update RSA key error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi khi cập nhật khóa RSA',
+            error: error.message
+        });
+    }
+};
+
+// Get RSA public key for a card
+exports.getRSAPublicKey = async (req, res) => {
+    try {
+        const { studentId } = req.params;
+
+        const card = await Card.findOne({ 
+            where: { studentId },
+            attributes: ['studentId', 'rsaPublicKey', 'rsaKeyCreatedAt']
+        });
+        
+        if (!card) {
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy thẻ'
+            });
+        }
+
+        if (!card.rsaPublicKey) {
+            return res.status(404).json({
+                success: false,
+                message: 'Thẻ chưa có khóa RSA'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                studentId: card.studentId,
+                rsaPublicKey: card.rsaPublicKey,
+                rsaKeyCreatedAt: card.rsaKeyCreatedAt
+            }
+        });
+    } catch (error) {
+        console.error('Get RSA key error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi khi lấy khóa RSA',
             error: error.message
         });
     }

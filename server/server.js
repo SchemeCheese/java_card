@@ -4,6 +4,10 @@ const morgan = require('morgan');
 const bodyParser = require('body-parser');
 require('dotenv').config();
 
+// Set timezone cho Node.js process (Asia/Ho_Chi_Minh = UTC+7)
+// Nếu muốn dùng UTC, comment dòng này
+process.env.TZ = process.env.TZ || 'Asia/Ho_Chi_Minh';
+
 // Import database and models
 const { sequelize, testConnection, syncDatabase } = require('./models');
 
@@ -46,11 +50,14 @@ const initializeServer = async () => {
 
         // Health check endpoint
         app.get('/api/health', (req, res) => {
+            const now = new Date();
             res.json({
                 status: 'OK',
                 message: 'Library Card Server is running',
                 database: 'MySQL',
-                timestamp: new Date().toISOString()
+                timestamp: now.toISOString(), // UTC
+                localTime: now.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }), // Local time (VN)
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone // Current timezone
             });
         });
 

@@ -45,7 +45,7 @@ public class BookApiService {
      * Return a book
      */
     public BorrowedBook returnBook(int borrowId) throws IOException {
-        ApiClient.ApiResponse response = apiClient.put("/books/return/" + borrowId, new JsonObject());
+        ApiClient.ApiResponse response = apiClient.patch("/books/return/" + borrowId, new JsonObject());
         
         if (!response.isSuccess()) {
             throw new IOException("Failed to return book: " + response.getMessage());
@@ -88,7 +88,7 @@ public class BookApiService {
             queryParams.append("&status=").append(status);
         }
         
-        ApiClient.ApiResponse response = apiClient.get("/books/borrowed", queryParams.toString());
+        ApiClient.ApiResponse response = apiClient.get("/books", queryParams.toString());
         
         if (!response.isSuccess()) {
             throw new IOException("Failed to get all borrowed books: " + response.getMessage());
@@ -108,7 +108,7 @@ public class BookApiService {
      * Delete borrowed book record
      */
     public boolean deleteBorrowedBook(int borrowId) throws IOException {
-        ApiClient.ApiResponse response = apiClient.delete("/books/borrowed/" + borrowId);
+        ApiClient.ApiResponse response = apiClient.delete("/books/" + borrowId);
         return response.isSuccess();
     }
     
@@ -117,6 +117,7 @@ public class BookApiService {
      */
     private BorrowedBook parseBorrowedBookFromJson(JsonObject json) {
         try {
+            int id = json.has("id") ? json.get("id").getAsInt() : 0;
             String bookId = json.has("bookId") ? json.get("bookId").getAsString() : "";
             String bookName = json.has("bookName") ? json.get("bookName").getAsString() : "";
             String borrowDate = json.has("borrowDate") ? formatDate(json.get("borrowDate").getAsString()) : "";
@@ -124,7 +125,7 @@ public class BookApiService {
             String status = json.has("status") ? json.get("status").getAsString() : "Đang mượn";
             int overdueDays = json.has("overdueDays") ? json.get("overdueDays").getAsInt() : 0;
             
-            return new BorrowedBook(bookId, bookName, borrowDate, dueDate, status, overdueDays);
+            return new BorrowedBook(id, bookId, bookName, borrowDate, dueDate, status, overdueDays);
         } catch (Exception e) {
             e.printStackTrace();
             return null;

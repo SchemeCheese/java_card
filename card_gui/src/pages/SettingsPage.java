@@ -1,9 +1,12 @@
 package pages;
 
+import api.ApiServiceManager;
+import api.CardApiService;
 import constants.AppConstants;
 import models.CardInfo;
 import service.SimulatorService;
 import ui.RoundedBorder;
+import utils.RSAUtility;
 
 import javax.swing.*;
 import javax.swing.border.*;
@@ -25,6 +28,8 @@ import java.util.regex.Pattern;
 public class SettingsPage extends JPanel {
     
     private SimulatorService simulatorService;
+    private ApiServiceManager apiManager;
+    private CardApiService cardApi;
     
     // Form fields
     private JTextField txtStudentId;
@@ -38,12 +43,24 @@ public class SettingsPage extends JPanel {
     // Card list panel
     private JPanel cardListPanel;
     
+    // Pagination
+    private int currentPage = 1;
+    private int totalPages = 1;
+    private int totalCards = 0;
+    private int pageSize = 20; // Số cards mỗi trang
+    private JPanel paginationPanel;
+    private JLabel paginationLabel;
+    private JButton prevButton;
+    private JButton nextButton;
+    
     // Activity log
     private DefaultTableModel logTableModel;
     private List<String[]> activityLog = new ArrayList<>();
     
     public SettingsPage(SimulatorService simulatorService) {
         this.simulatorService = simulatorService;
+        this.apiManager = ApiServiceManager.getInstance();
+        this.cardApi = apiManager.getCardApiService();
         
         setLayout(new BorderLayout());
         setBackground(AppConstants.BACKGROUND);
@@ -298,43 +315,118 @@ public class SettingsPage extends JPanel {
             
             // Save to JavaCard (if connected and PIN verified)
             if (simulatorService != null && simulatorService.isConnected() && simulatorService.isPinVerified()) {
+                // Step 1: Generate RSA keypair on card
+                byte[] publicKeyData = null;
+                String publicKeyPEM = null;
+                try {
+                    publicKeyData = simulatorService.generateRSAKeyPair();
+                    if (publicKeyData != null) {
+                        // Extract modulus and exponent
+                        byte[] modulus = new byte[applet.AppletConstants.RSA_MODULUS_SIZE];
+                        byte[] exponent = new byte[3];
+                        System.arraycopy(publicKeyData, 0, modulus, 0, modulus.length);
+                        System.arraycopy(publicKeyData, modulus.length, exponent, 0, exponent.length);
+                        
+                        // Convert to PEM format
+                        publicKeyPEM = RSAUtility.convertToPEM(modulus, exponent);
+                        addActivityLog("Tạo RSA keypair", studentId, "Thành công");
+                    }
+                } catch (Exception rsaEx) {
+                    addActivityLog("Tạo RSA keypair", studentId, "Thất bại: " + rsaEx.getMessage());
+                    // Continue anyway - RSA is optional
+                }
+                
+                // Step 2: Save card info to server (with RSA public key if available)
+                if (apiManager != null && apiManager.isServerAvailable()) {
+                    try {
+                        // Create card on server (only studentId and holderName)
+                        // email, department, birthDate, address are stored on card (applet) via AES encryption, not on server
+                        cardApi.createCard(studentId, name);
+                        
+                        // Update RSA public key if available
+                        if (publicKeyPEM != null) {
+                            try {
+                                cardApi.updateRSAPublicKey(studentId, publicKeyPEM);
+                                // Also save to CardInfo for later use
+                                cardInfo.setRsaPublicKey(publicKeyPEM);
+                                addActivityLog("Lưu RSA public key", studentId, "Thành công");
+                            } catch (Exception e) {
+                                addActivityLog("Lưu RSA public key", studentId, "Thất bại: " + e.getMessage());
+                            }
+                        }
+                        
+                        addActivityLog("Lưu thẻ lên server", studentId, "Thành công");
+                    } catch (Exception apiEx) {
+                        addActivityLog("Lưu thẻ lên server", studentId, "Thất bại: " + apiEx.getMessage());
+                        // Continue - save to card anyway
+                    }
+                }
+                
+                // Step 3: Save card info to card with AES encryption
                 boolean saved = simulatorService.setCardInfo(cardInfo);
                 if (saved) {
                     // Also add to in-memory list for display
                     simulatorService.addCardToList(cardInfo);
-                    addActivityLog("Tạo thẻ mới", studentId, "Thành công");
+                    addActivityLog("Lưu thông tin thẻ (AES)", studentId, "Thành công");
                     
                     JOptionPane.showMessageDialog(this,
-                        "Đã lưu thông tin thẻ thành công!\n" +
+                        "Đã tạo thẻ thành công!\n" +
                         "MSSV: " + studentId + "\n" +
-                        "Họ tên: " + name,
+                        "Họ tên: " + name + "\n" +
+                        (publicKeyPEM != null ? "✓ RSA keypair đã tạo\n" : "") +
+                        "✓ Thông tin đã được mã hóa AES",
                         "Thành công", JOptionPane.INFORMATION_MESSAGE);
                     
                     clearForm();
+                    // Reset to page 1 and refresh from server to show new card
+                    currentPage = 1;
                     refreshCardList();
                 } else {
-                    addActivityLog("Tạo thẻ mới", studentId, "Thất bại");
+                    addActivityLog("Lưu thông tin thẻ", studentId, "Thất bại");
                     JOptionPane.showMessageDialog(this,
                         "Không thể lưu thông tin thẻ!",
                         "Lỗi", JOptionPane.ERROR_MESSAGE);
                 }
             } else {
+                // Save to server first (if available)
+                boolean serverSaved = false;
+                if (apiManager != null && apiManager.isServerAvailable()) {
+                    try {
+                        // Create card on server (only studentId and holderName)
+                        // email, department, birthDate, address are stored on card (applet) via AES encryption, not on server
+                        cardApi.createCard(studentId, name);
+                        addActivityLog("Lưu thẻ lên server", studentId, "Thành công");
+                        serverSaved = true;
+                    } catch (Exception apiEx) {
+                        addActivityLog("Lưu thẻ lên server", studentId, "Thất bại: " + apiEx.getMessage());
+                        JOptionPane.showMessageDialog(this,
+                            "Không thể lưu thẻ lên server: " + apiEx.getMessage() + "\n" +
+                            "Thẻ sẽ chỉ được lưu ở chế độ demo (in-memory).",
+                            "Cảnh báo", JOptionPane.WARNING_MESSAGE);
+                    }
+                }
+                
                 // Save to in-memory only (demo mode)
                 if (simulatorService != null) {
                     simulatorService.addCardToList(cardInfo);
                 }
-                addActivityLog("Tạo thẻ mới", studentId, "Thành công");
+                addActivityLog("Tạo thẻ mới", studentId, serverSaved ? "Thành công (đã lưu server)" : "Thành công (demo)");
                 
                 JOptionPane.showMessageDialog(this,
-                    "Đã tạo thẻ mới (chế độ demo)!\n" +
+                    (serverSaved ? "Đã tạo thẻ mới và lưu vào database!\n" : "Đã tạo thẻ mới (chế độ demo)!\n") +
+                    "MSSV: " + studentId + "\n" +
+                    "Họ tên: " + name + "\n" +
+                    (serverSaved ? "✓ Đã lưu vào database\n" : "⚠ Chưa lưu vào database\n") +
                     "Lưu ý: Để lưu vào thẻ thật, vui lòng xác thực PIN trước.",
                     "Thành công", JOptionPane.INFORMATION_MESSAGE);
                 
                 clearForm();
+                // Reset to page 1 and refresh from server to show new card
+                currentPage = 1;
                 refreshCardList();
             }
         } catch (Exception ex) {
-            addActivityLog("Tạo thẻ mới", studentId, "Thất bại");
+            addActivityLog("Tạo thẻ mới", studentId, "Thất bại: " + ex.getMessage());
             JOptionPane.showMessageDialog(this,
                 "Lỗi khi tạo thẻ: " + ex.getMessage(),
                 "Lỗi", JOptionPane.ERROR_MESSAGE);
@@ -629,7 +721,48 @@ public class SettingsPage extends JPanel {
         cardScroll.getVerticalScrollBar().setUnitIncrement(16);
         
         panel.add(cardScroll);
+        
+        // Pagination panel
+        paginationPanel = createPaginationPanel();
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(paginationPanel);
+        
         panel.add(Box.createVerticalGlue());
+        
+        return panel;
+    }
+    
+    private JPanel createPaginationPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
+        panel.setBackground(Color.WHITE);
+        
+        prevButton = new JButton("← Trước");
+        prevButton.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        prevButton.setEnabled(false);
+        prevButton.addActionListener(e -> {
+            if (currentPage > 1) {
+                currentPage--;
+                refreshCardList(getFieldValue(txtSearch, "Tìm theo MSSV hoặc Tên..."));
+            }
+        });
+        
+        paginationLabel = new JLabel("Trang 1 / 1 (0 thẻ)");
+        paginationLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        paginationLabel.setForeground(AppConstants.TEXT_SECONDARY);
+        
+        nextButton = new JButton("Sau →");
+        nextButton.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        nextButton.setEnabled(false);
+        nextButton.addActionListener(e -> {
+            if (currentPage < totalPages) {
+                currentPage++;
+                refreshCardList(getFieldValue(txtSearch, "Tìm theo MSSV hoặc Tên..."));
+            }
+        });
+        
+        panel.add(prevButton);
+        panel.add(paginationLabel);
+        panel.add(nextButton);
         
         return panel;
     }
@@ -644,35 +777,185 @@ public class SettingsPage extends JPanel {
     }
     
     private void refreshCardList(String keyword) {
+        // Reset pagination if searching
+        if (!keyword.isEmpty()) {
+            currentPage = 1;
+        }
+        
         cardListPanel.removeAll();
         
-        List<CardInfo> cards;
-        if (simulatorService != null) {
-            if (keyword.isEmpty()) {
-                cards = simulatorService.getAllCards();
-            } else {
-                cards = simulatorService.searchCards(keyword);
+        List<CardInfo> cards = new ArrayList<>();
+        
+        // Debug: Check server availability
+        boolean serverAvailable = (apiManager != null && apiManager.isServerAvailable());
+        System.out.println("[SettingsPage] Server available: " + serverAvailable);
+        
+        // Ưu tiên load từ Server API
+        if (serverAvailable) {
+            try {
+                System.out.println("[SettingsPage] Attempting to load cards from server (page " + currentPage + ")...");
+                // Load từ server với pagination
+                api.CardApiService.PaginationResult result = cardApi.getAllCardsWithPagination(currentPage, pageSize);
+                
+                List<CardInfo> serverCards = result.getCards();
+                totalCards = result.getTotal();
+                totalPages = result.getTotalPages();
+                
+                System.out.println("[SettingsPage] Received " + serverCards.size() + " cards from server (page " + currentPage + "/" + totalPages + ", total: " + totalCards + ")");
+                
+                // Sync với SimulatorService để đồng bộ
+                if (simulatorService != null) {
+                    for (CardInfo serverCard : serverCards) {
+                        // Add hoặc update vào cardList của SimulatorService
+                        simulatorService.addCardToList(serverCard);
+                    }
+                    System.out.println("[SettingsPage] Synced " + serverCards.size() + " cards to SimulatorService");
+                }
+                
+                cards.addAll(serverCards);
+                System.out.println("[SettingsPage] Successfully loaded " + serverCards.size() + " cards from server");
+                
+                // Update pagination UI
+                updatePaginationUI();
+            } catch (java.io.IOException e) {
+                System.err.println("[SettingsPage] IOException loading cards from server: " + e.getMessage());
+                e.printStackTrace();
+                // Fallback to in-memory if server fails
+                resetPaginationForMemory();
+                if (simulatorService != null) {
+                    if (keyword.isEmpty()) {
+                        cards = simulatorService.getAllCards();
+                    } else {
+                        cards = simulatorService.searchCards(keyword);
+                    }
+                    System.out.println("[SettingsPage] Fallback: Loaded " + cards.size() + " cards from memory");
+                }
+            } catch (Exception e) {
+                System.err.println("[SettingsPage] Unexpected error loading cards: " + e.getMessage());
+                e.printStackTrace();
+                // Fallback to in-memory if server fails
+                resetPaginationForMemory();
+                if (simulatorService != null) {
+                    if (keyword.isEmpty()) {
+                        cards = simulatorService.getAllCards();
+                    } else {
+                        cards = simulatorService.searchCards(keyword);
+                    }
+                    System.out.println("[SettingsPage] Fallback: Loaded " + cards.size() + " cards from memory");
+                }
             }
         } else {
-            cards = new ArrayList<>();
+            // Fallback: Load từ in-memory (SimulatorService)
+            System.out.println("[SettingsPage] Server not available, loading from memory");
+            resetPaginationForMemory();
+            if (simulatorService != null) {
+                if (keyword.isEmpty()) {
+                    cards = simulatorService.getAllCards();
+                } else {
+                    cards = simulatorService.searchCards(keyword);
+                }
+                System.out.println("[SettingsPage] Loaded " + cards.size() + " cards from memory");
+            } else {
+                System.out.println("[SettingsPage] SimulatorService is null!");
+            }
+        }
+        
+        // Filter by keyword if provided (after loading from server)
+        if (!keyword.isEmpty() && !cards.isEmpty()) {
+            String lowerKeyword = keyword.toLowerCase();
+            List<CardInfo> filtered = new ArrayList<>();
+            for (CardInfo card : cards) {
+                if (card.getStudentId().toLowerCase().contains(lowerKeyword) ||
+                    card.getHolderName().toLowerCase().contains(lowerKeyword)) {
+                    filtered.add(card);
+                }
+            }
+            cards = filtered;
         }
         
         if (cards.isEmpty()) {
-            JLabel emptyLabel = new JLabel("Chưa có thẻ nào được tạo");
+            JLabel emptyLabel;
+            if (serverAvailable) {
+                emptyLabel = new JLabel("Chưa có thẻ nào được tạo (đã kiểm tra server)");
+            } else {
+                emptyLabel = new JLabel("Chưa có thẻ nào được tạo (server không khả dụng)");
+            }
             emptyLabel.setFont(new Font("Segoe UI", Font.ITALIC, 14));
             emptyLabel.setForeground(AppConstants.TEXT_SECONDARY);
             emptyLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
             cardListPanel.add(Box.createVerticalStrut(50));
             cardListPanel.add(emptyLabel);
-        } else {
-            for (CardInfo card : cards) {
-                cardListPanel.add(createCardItem(card));
-                cardListPanel.add(Box.createVerticalStrut(8));
+            
+            // Thêm nút refresh nếu server không available
+            if (!serverAvailable) {
+                JButton refreshBtn = new JButton("Thử lại kết nối server");
+                refreshBtn.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+                refreshBtn.setAlignmentX(Component.CENTER_ALIGNMENT);
+                refreshBtn.addActionListener(e -> {
+                    System.out.println("[SettingsPage] User clicked refresh server connection");
+                    refreshCardList(keyword);
+                });
+                cardListPanel.add(Box.createVerticalStrut(10));
+                cardListPanel.add(refreshBtn);
             }
+        } else {
+            System.out.println("[SettingsPage] Displaying " + cards.size() + " cards in UI");
+            int displayedCount = 0;
+            for (CardInfo card : cards) {
+                // Validate card before displaying
+                if (card == null) {
+                    System.err.println("[SettingsPage] Skipping null card");
+                    continue;
+                }
+                if (card.getStudentId() == null || card.getStudentId().isEmpty()) {
+                    System.err.println("[SettingsPage] Skipping card with empty studentId");
+                    continue;
+                }
+                try {
+                    cardListPanel.add(createCardItem(card));
+                    cardListPanel.add(Box.createVerticalStrut(8));
+                    displayedCount++;
+                } catch (Exception e) {
+                    System.err.println("[SettingsPage] Error creating card item for " + card.getStudentId() + ": " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+            System.out.println("[SettingsPage] Successfully displayed " + displayedCount + " cards");
         }
         
         cardListPanel.revalidate();
         cardListPanel.repaint();
+        
+        System.out.println("[SettingsPage] Card list refreshed. Total cards: " + cards.size());
+    }
+    
+    private void resetPaginationForMemory() {
+        // Reset pagination when using in-memory data (no pagination needed)
+        totalCards = 0;
+        totalPages = 1;
+        currentPage = 1;
+        updatePaginationUI();
+    }
+    
+    private void updatePaginationUI() {
+        if (paginationLabel != null) {
+            if (totalCards > 0) {
+                paginationLabel.setText(String.format("Trang %d / %d (%d thẻ)", currentPage, totalPages, totalCards));
+            } else {
+                paginationLabel.setText("Không có dữ liệu");
+            }
+        }
+        if (prevButton != null) {
+            prevButton.setEnabled(currentPage > 1);
+        }
+        if (nextButton != null) {
+            nextButton.setEnabled(currentPage < totalPages);
+        }
+        
+        // Hide pagination if no cards or only one page
+        if (paginationPanel != null) {
+            paginationPanel.setVisible(totalCards > 0 && totalPages > 1);
+        }
     }
     
     private JPanel createCardItem(CardInfo card) {

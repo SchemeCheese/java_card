@@ -1,5 +1,8 @@
 package pages;
 
+import api.ApiServiceManager;
+import api.CardApiService;
+import api.TransactionApiService;
 import constants.AppConstants;
 import models.CardInfo;
 import models.Transaction;
@@ -22,6 +25,9 @@ import java.util.Locale;
 public class FinancePage extends JPanel {
     
     private SimulatorService simulatorService;
+    private ApiServiceManager apiManager;
+    private CardApiService cardApi;
+    private TransactionApiService transactionApi;
     private String studentCode;
     private long balance;
     private List<Transaction> transactions;
@@ -31,11 +37,13 @@ public class FinancePage extends JPanel {
     
     public FinancePage(SimulatorService simulatorService) {
         this.simulatorService = simulatorService;
+        this.apiManager = ApiServiceManager.getInstance();
+        this.cardApi = apiManager.getCardApiService();
+        this.transactionApi = apiManager.getTransactionApiService();
         this.studentCode = simulatorService.getCurrentStudentCode();
         
-        // Lấy số dư và lịch sử giao dịch thực tế từ SimulatorService
-        this.balance = simulatorService.getBalance(studentCode);
-        this.transactions = new ArrayList<>(simulatorService.getTransactions(studentCode));
+        // Load data từ API hoặc SimulatorService
+        loadFinanceData();
         
         setLayout(new BorderLayout());
         setBackground(AppConstants.BACKGROUND);
@@ -65,6 +73,58 @@ public class FinancePage extends JPanel {
         scroll.getVerticalScrollBar().setUnitIncrement(16);
         
         add(scroll, BorderLayout.CENTER);
+    }
+    
+    /**
+     * Load finance data từ API hoặc SimulatorService
+     */
+    private void loadFinanceData() {
+        if (apiManager.isServerAvailable()) {
+            try {
+                // Load balance từ API
+                CardInfo card = cardApi.getCard(studentCode);
+                if (card != null) {
+                    this.balance = card.getBalance();
+                }
+                
+                // Load transactions từ API
+                List<Transaction> apiTransactions = transactionApi.getTransactionsByStudent(
+                    studentCode, null, null, null, null, 1, 50
+                );
+                this.transactions = apiTransactions != null ? apiTransactions : new ArrayList<>();
+                
+                // Update UI
+                if (balanceValue != null) {
+                    balanceValue.setText(String.format("%,d VND", balance));
+                }
+                if (historyModel != null) {
+                    refreshHistoryTable();
+                }
+                return;
+            } catch (Exception e) {
+                System.err.println("Error loading finance data from API: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+        
+        // Fallback về SimulatorService
+        this.balance = simulatorService.getBalance(studentCode);
+        this.transactions = new ArrayList<>(simulatorService.getTransactions(studentCode));
+    }
+    
+    /**
+     * Refresh history table
+     */
+    private void refreshHistoryTable() {
+        if (historyModel == null) return;
+        
+        historyModel.setRowCount(0);
+        NumberFormat fmt = NumberFormat.getInstance(new Locale("vi", "VN"));
+        for (Transaction t : transactions) {
+            String amtStr = (t.getAmount() >= 0 ? "+ " : "- ") +
+                fmt.format(Math.abs(t.getAmount())) + " VND";
+            historyModel.addRow(new Object[]{t.getDate(), t.getType(), amtStr, t.getStatus()});
+        }
     }
     
     private JPanel createHeader() {
@@ -482,30 +542,77 @@ public class FinancePage extends JPanel {
 
     private void handleTopup(long amount) {
         if (amount <= 0) {
-            JOptionPane.showMessageDialog(this, "Số tiền nạp phải lớn hơn 0!", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this,
+                "Số tiền phải lớn hơn 0!",
+                "Lỗi", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        boolean ok = simulatorService.deposit(studentCode, amount);
-        if (!ok) {
-            JOptionPane.showMessageDialog(this, "Không thể nạp tiền. Vui lòng thử lại!", "Lỗi", JOptionPane.ERROR_MESSAGE);
-            return;
+        
+        if (apiManager.isServerAvailable()) {
+            try {
+                // Update balance qua API
+                long newBalance = cardApi.updateBalance(studentCode, amount);
+                
+                // Create transaction record
+                CardInfo card = cardApi.getCard(studentCode);
+                long balanceBefore = card != null ? (card.getBalance() - amount) : balance;
+                long balanceAfter = newBalance;
+                
+                transactionApi.createTransaction(
+                    studentCode, "Nạp tiền", amount,
+                    balanceBefore, balanceAfter, "Nạp tiền qua ứng dụng"
+                );
+                
+                // Refresh data
+                this.balance = newBalance;
+                if (balanceValue != null) {
+                    balanceValue.setText(String.format("%,d VND", balance));
+                }
+                
+                // Reload transactions
+                loadFinanceData();
+                
+                JOptionPane.showMessageDialog(this,
+                    "Nạp tiền thành công!\nSố dư mới: " + String.format("%,d VND", newBalance),
+                    "Thành công", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            } catch (Exception e) {
+                System.err.println("Error topping up via API: " + e.getMessage());
+                JOptionPane.showMessageDialog(this,
+                    "Lỗi khi nạp tiền: " + e.getMessage(),
+                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+                // Fallback to SimulatorService
+            }
         }
-        // Cập nhật balance và lịch sử giao dịch
-        this.balance = simulatorService.getBalance(studentCode);
-        NumberFormat fmt = NumberFormat.getInstance(new Locale("vi", "VN"));
-        balanceValue.setText(fmt.format(balance) + " VND");
-
-        this.transactions = new ArrayList<>(simulatorService.getTransactions(studentCode));
-        historyModel.setRowCount(0);
-        for (Transaction t : transactions) {
-            String amtStr = (t.getAmount() >= 0 ? "+ " : "- ") +
-                fmt.format(Math.abs(t.getAmount())) + " VND";
-            historyModel.addRow(new Object[]{t.getDate(), t.getType(), amtStr, t.getStatus()});
+        
+        // Fallback về SimulatorService
+        try {
+            boolean success = simulatorService.deposit(studentCode, amount);
+            if (!success) {
+                JOptionPane.showMessageDialog(this,
+                    "Không thể nạp tiền. Vui lòng thử lại!",
+                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            
+            // Cập nhật balance và lịch sử giao dịch
+            this.balance = simulatorService.getBalance(studentCode);
+            
+            if (balanceValue != null) {
+                balanceValue.setText(String.format("%,d VND", balance));
+            }
+            
+            // Reload transactions từ SimulatorService
+            this.transactions = new ArrayList<>(simulatorService.getTransactions(studentCode));
+            refreshHistoryTable();
+            
+            JOptionPane.showMessageDialog(this,
+                "Nạp tiền thành công!\nSố dư mới: " + String.format("%,d VND", balance),
+                "Thành công", JOptionPane.INFORMATION_MESSAGE);
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this,
+                "Lỗi khi nạp tiền: " + ex.getMessage(),
+                "Lỗi", JOptionPane.ERROR_MESSAGE);
         }
-
-        JOptionPane.showMessageDialog(this,
-                "Nạp tiền thành công: " + fmt.format(amount) + " VND",
-                "Thành công",
-                JOptionPane.INFORMATION_MESSAGE);
     }
 }
