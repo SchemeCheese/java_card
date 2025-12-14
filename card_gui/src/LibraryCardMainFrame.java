@@ -48,6 +48,31 @@ public class LibraryCardMainFrame extends JFrame {
         setSize(1400, 900);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
+        
+        // Pre-check server availability trong background để cache sớm
+        // Giúp các pages sau không phải chờ check server
+        preCheckServerAvailability();
+    }
+    
+    /**
+     * Pre-check server availability trong background để cache sớm
+     * Giúp các pages sau không phải chờ check server
+     */
+    private void preCheckServerAvailability() {
+        SwingWorker<Void, Void> worker = new SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() {
+                try {
+                    // Check server 1 lần để cache kết quả
+                    api.ApiServiceManager.getInstance().isServerAvailable();
+                    System.out.println("[LibraryCardMainFrame] Server availability pre-checked and cached");
+                } catch (Exception e) {
+                    System.err.println("[LibraryCardMainFrame] Error pre-checking server: " + e.getMessage());
+                }
+                return null;
+            }
+        };
+        worker.execute();
     }
 
     private void initSimulator() {

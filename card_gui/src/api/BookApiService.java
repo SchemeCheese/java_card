@@ -117,6 +117,7 @@ public class BookApiService {
      */
     private BorrowedBook parseBorrowedBookFromJson(JsonObject json) {
         try {
+            int id = json.has("id") ? json.get("id").getAsInt() : 0;
             String bookId = json.has("bookId") ? json.get("bookId").getAsString() : "";
             String bookName = json.has("bookName") ? json.get("bookName").getAsString() : "";
             String borrowDate = json.has("borrowDate") ? formatDate(json.get("borrowDate").getAsString()) : "";
@@ -124,7 +125,7 @@ public class BookApiService {
             String status = json.has("status") ? json.get("status").getAsString() : "Đang mượn";
             int overdueDays = json.has("overdueDays") ? json.get("overdueDays").getAsInt() : 0;
             
-            return new BorrowedBook(bookId, bookName, borrowDate, dueDate, status, overdueDays);
+            return new BorrowedBook(id, bookId, bookName, borrowDate, dueDate, status, overdueDays);
         } catch (Exception e) {
             e.printStackTrace();
             return null;

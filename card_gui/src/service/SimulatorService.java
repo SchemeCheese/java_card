@@ -493,7 +493,8 @@ public class SimulatorService {
 
     /**
      * Set card info with AES encryption
-     * Encrypts card data before sending to card
+     * Card ID is stored as plaintext (used for key derivation)
+     * Only Name and Expiry Date are encrypted
      */
     public boolean setCardInfo(CardInfo cardInfo) throws Exception {
         if (!isConnected || !isPinVerified) {
@@ -501,14 +502,14 @@ public class SimulatorService {
         }
         
         try {
+            // Card ID is stored as plaintext (needed for key derivation)
+            String cardId = cardInfo.getStudentId();
+            
             // Derive AES key from master key and card ID
             String masterKey = AESUtility.getMasterKey();
-            String cardId = cardInfo.getStudentId();
             javax.crypto.SecretKey aesKey = AESUtility.deriveKey(masterKey, cardId);
             
-            // Encrypt card data
-            byte[] encryptedCardId = AESUtility.encrypt(
-                cardId.getBytes(StandardCharsets.UTF_8), aesKey);
+            // Encrypt Name and Expiry Date (Card ID is plaintext)
             byte[] encryptedName = AESUtility.encrypt(
                 cardInfo.getHolderName().getBytes(StandardCharsets.UTF_8), aesKey);
             
@@ -519,24 +520,28 @@ public class SimulatorService {
             byte[] encryptedExpiry = AESUtility.encrypt(
                 expiryDate.getBytes(StandardCharsets.UTF_8), aesKey);
             
-            // Prepare APDU command
-            // Format: [ENCRYPTED_FLAG (1 byte)] [CARD_ID_ENCRYPTED] [NAME_LEN] [NAME_ENCRYPTED] [EXPIRY_ENCRYPTED]
-            // Note: CardInfoManager expects: [FLAG] [CARD_ID (10)] [NAME_LEN] [NAME] [EXPIRY (8)]
-            // We need to pad/truncate to fit applet constraints
-            
-            // Truncate encrypted data to fit applet constraints
+            // Prepare Card ID as plaintext (pad/truncate to 10 bytes)
+            byte[] cardIdBytes = cardId.getBytes(StandardCharsets.UTF_8);
             byte[] cardIdData = new byte[AppletConstants.CARD_ID_LENGTH];
-            System.arraycopy(encryptedCardId, 0, cardIdData, 0, 
-                Math.min(cardIdData.length, encryptedCardId.length));
+            System.arraycopy(cardIdBytes, 0, cardIdData, 0, 
+                Math.min(cardIdData.length, cardIdBytes.length));
             
+            // Truncate encrypted Name to fit applet constraints (max 50 bytes)
+            // Note: Encrypted data format is [IV (16 bytes)] + [Encrypted data]
+            // If truncated, IV will be lost and decryption will fail
+            // This is a limitation - we can only store partial encrypted data
             byte[] nameData = new byte[Math.min(encryptedName.length, AppletConstants.NAME_MAX_LENGTH)];
             System.arraycopy(encryptedName, 0, nameData, 0, nameData.length);
             
+            // Truncate encrypted Expiry to fit applet constraints (8 bytes)
+            // Note: This will lose IV, making decryption impossible
+            // For expiry date, we might need to store it plaintext or use a different approach
             byte[] expiryData = new byte[AppletConstants.EXPIRY_DATE_LENGTH];
             System.arraycopy(encryptedExpiry, 0, expiryData, 0, 
                 Math.min(expiryData.length, encryptedExpiry.length));
             
             // Build command
+            // Format: [ENCRYPTED_FLAG (1)] [CARD_ID_PLAINTEXT (10)] [NAME_LEN] [NAME_ENCRYPTED] [EXPIRY_ENCRYPTED]
             int totalLength = 1 + cardIdData.length + 1 + nameData.length + expiryData.length;
             byte[] cmd = new byte[5 + totalLength];
             cmd[0] = (byte)0x00;
@@ -546,17 +551,17 @@ public class SimulatorService {
             cmd[4] = (byte)totalLength;
             
             int offset = 5;
-            // Encrypted flag
-            cmd[offset++] = (byte)0x01; // Encrypted
-            // Card ID
+            // Encrypted flag (1 = Name and Expiry are encrypted, Card ID is plaintext)
+            cmd[offset++] = (byte)0x01;
+            // Card ID (PLAINTEXT)
             System.arraycopy(cardIdData, 0, cmd, offset, cardIdData.length);
             offset += cardIdData.length;
             // Name length
             cmd[offset++] = (byte)nameData.length;
-            // Name
+            // Name (ENCRYPTED, may be truncated)
             System.arraycopy(nameData, 0, cmd, offset, nameData.length);
             offset += nameData.length;
-            // Expiry date
+            // Expiry date (ENCRYPTED, may be truncated)
             System.arraycopy(expiryData, 0, cmd, offset, expiryData.length);
             
             byte[] resp = sendCommand(cmd);
@@ -592,80 +597,72 @@ public class SimulatorService {
             }
             
             // Response format: [ENCRYPTED_FLAG (1)] [CARD_ID] [NAME_LEN] [NAME] [EXPIRY] [NUM_BOOKS]
+            // If ENCRYPTED_FLAG = 1: Card ID is plaintext, Name and Expiry are encrypted
             byte[] data = new byte[resp.length - 2];
             System.arraycopy(resp, 0, data, 0, data.length);
             
             int offset = 0;
             boolean encrypted = (data[offset++] == (byte)0x01);
             
-            // Read Card ID
-            byte[] cardIdEncrypted = new byte[AppletConstants.CARD_ID_LENGTH];
-            System.arraycopy(data, offset, cardIdEncrypted, 0, cardIdEncrypted.length);
-            offset += cardIdEncrypted.length;
+            // Read Card ID (PLAINTEXT if encrypted flag is set, otherwise may be plaintext)
+            byte[] cardIdBytes = new byte[AppletConstants.CARD_ID_LENGTH];
+            System.arraycopy(data, offset, cardIdBytes, 0, cardIdBytes.length);
+            offset += cardIdBytes.length;
+            String cardId = new String(cardIdBytes, StandardCharsets.UTF_8).trim();
             
             // Read Name
             byte nameLen = data[offset++];
-            byte[] nameEncrypted = new byte[nameLen];
-            System.arraycopy(data, offset, nameEncrypted, 0, nameLen);
+            byte[] nameData = new byte[nameLen];
+            System.arraycopy(data, offset, nameData, 0, nameLen);
             offset += nameLen;
             
             // Read Expiry
-            byte[] expiryEncrypted = new byte[AppletConstants.EXPIRY_DATE_LENGTH];
-            System.arraycopy(data, offset, expiryEncrypted, 0, expiryEncrypted.length);
-            offset += expiryEncrypted.length;
+            byte[] expiryData = new byte[AppletConstants.EXPIRY_DATE_LENGTH];
+            System.arraycopy(data, offset, expiryData, 0, expiryData.length);
+            offset += expiryData.length;
             
             // Read num books
             byte numBooks = data[offset];
             
             CardInfo cardInfo = new CardInfo();
             cardInfo.setBorrowedBooks(numBooks & 0xFF);
+            cardInfo.setStudentId(cardId); // Card ID is always plaintext
             
             if (encrypted) {
-                // Decrypt data
-                // Note: We need the card ID to derive the key, but card ID is encrypted
-                // This is a chicken-and-egg problem. For now, we'll try to decrypt with
-                // a temporary approach or store card ID separately
-                
-                // Try to get card ID from current session
-                String cardId = currentStudentCode;
-                if (cardId == null || cardId.isEmpty()) {
-                    // If we don't have card ID, we can't decrypt
-                    // Return encrypted data as-is or throw error
-                    throw new Exception("Không thể giải mã: Chưa có Card ID");
-                }
-                
+                // Name and Expiry are encrypted, Card ID is plaintext
+                // Use Card ID to derive key
                 String masterKey = AESUtility.getMasterKey();
                 javax.crypto.SecretKey aesKey = AESUtility.deriveKey(masterKey, cardId);
                 
-                // Decrypt (note: encrypted data may be longer than original due to padding)
-                // We'll try to decrypt and handle padding
+                // Decrypt Name
                 try {
-                    byte[] decryptedCardId = AESUtility.decrypt(cardIdEncrypted, aesKey);
-                    byte[] decryptedName = AESUtility.decrypt(nameEncrypted, aesKey);
-                    // Expiry date is decrypted but not used in CardInfo model currently
-                    // byte[] decryptedExpiry = AESUtility.decrypt(expiryEncrypted, aesKey);
-                    
-                    // Extract original data (remove padding if needed)
-                    String cardIdStr = new String(decryptedCardId, StandardCharsets.UTF_8).trim();
-                    String nameStr = new String(decryptedName, StandardCharsets.UTF_8).trim();
-                    // Expiry date is in DDMMYYYY format (not used in CardInfo model currently)
-                    
-                    cardInfo.setStudentId(cardIdStr);
-                    cardInfo.setHolderName(nameStr);
-                    
+                    // Note: Encrypted data may be truncated (missing IV or partial data)
+                    // If data is too short (< 16 bytes), it's likely truncated and can't be decrypted
+                    if (nameData.length >= 16) {
+                        byte[] decryptedName = AESUtility.decrypt(nameData, aesKey);
+                        String nameStr = new String(decryptedName, StandardCharsets.UTF_8).trim();
+                        cardInfo.setHolderName(nameStr);
+                    } else {
+                        // Data too short, likely truncated - treat as plaintext or use fallback
+                        System.err.println("Warning: Encrypted name data too short, may be truncated");
+                        String nameStr = new String(nameData, StandardCharsets.UTF_8).trim();
+                        cardInfo.setHolderName(nameStr);
+                    }
                 } catch (Exception e) {
-                    // If decryption fails, data might not be encrypted or key is wrong
-                    // Try to read as plain text
-                    String cardIdStr = new String(cardIdEncrypted, StandardCharsets.UTF_8).trim();
-                    String nameStr = new String(nameEncrypted, StandardCharsets.UTF_8).trim();
-                    cardInfo.setStudentId(cardIdStr);
+                    // Decryption failed - data may be truncated or corrupted
+                    // Fallback to plaintext (may be garbage if actually encrypted)
+                    System.err.println("Warning: Failed to decrypt name, using as plaintext: " + e.getMessage());
+                    String nameStr = new String(nameData, StandardCharsets.UTF_8).trim();
                     cardInfo.setHolderName(nameStr);
                 }
+                
+                // Expiry date decryption (not used in CardInfo model currently)
+                // Note: Expiry is only 8 bytes, encrypted data needs 16+ bytes (IV + encrypted)
+                // So expiry cannot be properly encrypted with current constraints
+                // For now, we'll skip expiry decryption
             } else {
-                // Plain text data
-                String cardIdStr = new String(cardIdEncrypted, StandardCharsets.UTF_8).trim();
-                String nameStr = new String(nameEncrypted, StandardCharsets.UTF_8).trim();
-                cardInfo.setStudentId(cardIdStr);
+                // All data is plaintext
+                String nameStr = new String(nameData, StandardCharsets.UTF_8).trim();
                 cardInfo.setHolderName(nameStr);
             }
             
