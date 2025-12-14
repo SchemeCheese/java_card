@@ -92,6 +92,24 @@ public class ApiClient {
     }
     
     /**
+     * PATCH request
+     */
+    public ApiResponse patch(String endpoint, Object body) throws IOException {
+        String jsonBody = gson.toJson(body);
+        RequestBody requestBody = RequestBody.create(
+                MediaType.parse("application/json; charset=utf-8"),
+                jsonBody
+        );
+        
+        Request request = new Request.Builder()
+                .url(BASE_URL + endpoint)
+                .patch(requestBody)
+                .build();
+        
+        return executeRequest(request);
+    }
+    
+    /**
      * DELETE request
      */
     public ApiResponse delete(String endpoint) throws IOException {

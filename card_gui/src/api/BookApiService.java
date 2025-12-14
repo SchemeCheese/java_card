@@ -45,7 +45,7 @@ public class BookApiService {
      * Return a book
      */
     public BorrowedBook returnBook(int borrowId) throws IOException {
-        ApiClient.ApiResponse response = apiClient.put("/books/return/" + borrowId, new JsonObject());
+        ApiClient.ApiResponse response = apiClient.patch("/books/return/" + borrowId, new JsonObject());
         
         if (!response.isSuccess()) {
             throw new IOException("Failed to return book: " + response.getMessage());
@@ -63,7 +63,7 @@ public class BookApiService {
             queryParams.append("&status=").append(status);
         }
         
-        ApiClient.ApiResponse response = apiClient.get("/books/borrowed/" + studentId, queryParams.toString());
+        ApiClient.ApiResponse response = apiClient.get("/books/student/" + studentId, queryParams.toString());
         
         if (!response.isSuccess()) {
             throw new IOException("Failed to get borrowed books: " + response.getMessage());
@@ -88,7 +88,7 @@ public class BookApiService {
             queryParams.append("&status=").append(status);
         }
         
-        ApiClient.ApiResponse response = apiClient.get("/books/borrowed", queryParams.toString());
+        ApiClient.ApiResponse response = apiClient.get("/books", queryParams.toString());
         
         if (!response.isSuccess()) {
             throw new IOException("Failed to get all borrowed books: " + response.getMessage());
@@ -108,7 +108,7 @@ public class BookApiService {
      * Delete borrowed book record
      */
     public boolean deleteBorrowedBook(int borrowId) throws IOException {
-        ApiClient.ApiResponse response = apiClient.delete("/books/borrowed/" + borrowId);
+        ApiClient.ApiResponse response = apiClient.delete("/books/" + borrowId);
         return response.isSuccess();
     }
     
