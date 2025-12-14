@@ -550,21 +550,14 @@ public class FinancePage extends JPanel {
         
         if (apiManager.isServerAvailable()) {
             try {
-                // Update balance qua API
-                long newBalance = cardApi.updateBalance(studentCode, amount);
-                
-                // Create transaction record
-                CardInfo card = cardApi.getCard(studentCode);
-                long balanceBefore = card != null ? (card.getBalance() - amount) : balance;
-                long balanceAfter = newBalance;
-                
+                // Chỉ tạo transaction - server sẽ tự động cập nhật balance
                 transactionApi.createTransaction(
-                    studentCode, "Nạp tiền", amount,
-                    balanceBefore, balanceAfter, "Nạp tiền qua ứng dụng"
+                    studentCode, "Nạp tiền", amount, "Nạp tiền qua ứng dụng"
                 );
                 
                 // Refresh data
-                this.balance = newBalance;
+                CardInfo card = cardApi.getCard(studentCode);
+                this.balance = card != null ? card.getBalance() : 0;
                 if (balanceValue != null) {
                     balanceValue.setText(String.format("%,d VND", balance));
                 }
@@ -573,7 +566,7 @@ public class FinancePage extends JPanel {
                 loadFinanceData();
                 
                 JOptionPane.showMessageDialog(this,
-                    "Nạp tiền thành công!\nSố dư mới: " + String.format("%,d VND", newBalance),
+                    "Nạp tiền thành công!\nSố dư mới: " + String.format("%,d VND", balance),
                     "Thành công", JOptionPane.INFORMATION_MESSAGE);
                 return;
             } catch (Exception e) {
