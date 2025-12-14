@@ -89,6 +89,11 @@ public class CardInfoPage extends JPanel {
                 CardInfo card = cardApi.getCard(currentStudentCode);
                 if (card != null) {
                     this.cardInfo = card;
+                    // Load ảnh từ server nếu có imagePath
+                    if (card.getImagePath() != null && !card.getImagePath().isEmpty()) {
+                        // loadImage sẽ tự động detect URL và load từ server
+                        loadImage(card.getImagePath());
+                    }
                     return;
                 }
             } catch (Exception e) {
@@ -99,6 +104,10 @@ public class CardInfoPage extends JPanel {
         
         // Fallback về SimulatorService
         this.cardInfo = simulatorService.getCardByStudentCode(currentStudentCode);
+        // Load ảnh nếu có
+        if (this.cardInfo != null && this.cardInfo.getImagePath() != null && !this.cardInfo.getImagePath().isEmpty()) {
+            loadImage(this.cardInfo.getImagePath());
+        }
     }
     
     private JPanel createHeader() {
@@ -334,17 +343,44 @@ public class CardInfoPage extends JPanel {
         int result = fileChooser.showOpenDialog(this);
         if (result == JFileChooser.APPROVE_OPTION) {
             File selectedFile = fileChooser.getSelectedFile();
-            String filePath = selectedFile.getAbsolutePath();
             
-            // Load and display image
-            if (loadImage(filePath)) {
-                // Save path to cardInfo
-                if (cardInfo != null) {
-                    cardInfo.setImagePath(filePath);
+            // Load and display image locally first
+            if (loadImage(selectedFile.getAbsolutePath())) {
+                // Upload to server
+                try {
+                    String studentCode = simulatorService.getCurrentStudentCode();
                     
-                    // Update in service
-                    try {
-                        String studentCode = simulatorService.getCurrentStudentCode();
+                    if (apiManager != null && apiManager.isServerAvailable()) {
+                        // Upload to server
+                        System.out.println("[CardInfoPage] Uploading avatar to server...");
+                        CardInfo updated = cardApi.uploadAvatar(studentCode, selectedFile);
+                        
+                        if (updated != null && updated.getImagePath() != null) {
+                            // Update cardInfo với imagePath từ server
+                            this.cardInfo = updated;
+                            
+                            // Load ảnh từ server URL
+                            String imageUrl = api.ApiClient.SERVER_URL + "/" + updated.getImagePath();
+                            loadImageFromUrl(imageUrl);
+                            
+                            // Update local service
+                            if (simulatorService.isConnected() && simulatorService.isPinVerified()) {
+                                simulatorService.setCardInfo(cardInfo);
+                            } else {
+                                simulatorService.addCardToList(cardInfo);
+                            }
+                            
+                            JOptionPane.showMessageDialog(this,
+                                "Đã upload ảnh đại diện lên server thành công!",
+                                "Thành công", JOptionPane.INFORMATION_MESSAGE);
+                            return;
+                        }
+                    }
+                    
+                    // Fallback: Lưu local nếu server không available
+                    if (cardInfo != null) {
+                        cardInfo.setImagePath(selectedFile.getAbsolutePath());
+                        
                         if (simulatorService.isConnected() && simulatorService.isPinVerified()) {
                             simulatorService.setCardInfo(cardInfo);
                         } else {
@@ -352,14 +388,15 @@ public class CardInfoPage extends JPanel {
                         }
                         
                         JOptionPane.showMessageDialog(this,
-                            "Đã cập nhật ảnh đại diện thành công!",
+                            "Đã cập nhật ảnh đại diện (local)!",
                             "Thành công", JOptionPane.INFORMATION_MESSAGE);
-                    } catch (Exception ex) {
-                        JOptionPane.showMessageDialog(this,
-                            "Lỗi khi lưu ảnh: " + ex.getMessage(),
-                            "Lỗi", JOptionPane.ERROR_MESSAGE);
-                        ex.printStackTrace();
                     }
+                } catch (Exception ex) {
+                    System.err.println("[CardInfoPage] Error uploading avatar: " + ex.getMessage());
+                    ex.printStackTrace();
+                    JOptionPane.showMessageDialog(this,
+                        "Lỗi khi upload ảnh: " + ex.getMessage(),
+                        "Lỗi", JOptionPane.ERROR_MESSAGE);
                 }
             } else {
                 JOptionPane.showMessageDialog(this,
@@ -370,7 +407,7 @@ public class CardInfoPage extends JPanel {
     }
     
     /**
-     * Load image from file path
+     * Load image from file path or URL
      */
     private boolean loadImage(String imagePath) {
         if (imagePath == null || imagePath.isEmpty()) {
@@ -382,6 +419,18 @@ public class CardInfoPage extends JPanel {
         }
         
         try {
+            // Check if it's a URL (starts with http:// or https://)
+            if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
+                return loadImageFromUrl(imagePath);
+            }
+            
+            // Check if it's a server path (starts with uploads/avatars/)
+            if (imagePath.startsWith("uploads/avatars/") || imagePath.startsWith("/uploads/avatars/")) {
+                String url = api.ApiClient.SERVER_URL + "/" + imagePath.replaceAll("^/+", "");
+                return loadImageFromUrl(url);
+            }
+            
+            // Local file path
             File imageFile = new File(imagePath);
             if (!imageFile.exists()) {
                 currentImageIcon = null;
@@ -424,6 +473,76 @@ public class CardInfoPage extends JPanel {
             
             return true;
         } catch (Exception e) {
+            e.printStackTrace();
+            currentImageIcon = null;
+            if (avatarLabel != null) {
+                avatarLabel.repaint();
+            }
+            return false;
+        }
+    }
+    
+    /**
+     * Load image from URL (server)
+     */
+    private boolean loadImageFromUrl(String imageUrl) {
+        try {
+            System.out.println("[CardInfoPage] Loading image from URL: " + imageUrl);
+            
+            // Download image from URL
+            java.net.URL url = new java.net.URL(imageUrl);
+            java.awt.Image image = java.awt.Toolkit.getDefaultToolkit().getImage(url);
+            
+            // Wait for image to load
+            java.awt.MediaTracker tracker = new java.awt.MediaTracker(this);
+            tracker.addImage(image, 0);
+            try {
+                tracker.waitForAll();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            
+            if (tracker.isErrorAny()) {
+                System.err.println("[CardInfoPage] Error loading image from URL");
+                currentImageIcon = null;
+                if (avatarLabel != null) {
+                    avatarLabel.repaint();
+                }
+                return false;
+            }
+            
+            // Scale image to fit avatar size (160x170)
+            int targetWidth = 160;
+            int targetHeight = 170;
+            
+            int imgWidth = image.getWidth(null);
+            int imgHeight = image.getHeight(null);
+            
+            if (imgWidth > 0 && imgHeight > 0) {
+                double scale = Math.min((double)targetWidth / imgWidth, (double)targetHeight / imgHeight);
+                int scaledWidth = (int)(imgWidth * scale);
+                int scaledHeight = (int)(imgHeight * scale);
+                
+                // Create scaled image
+                BufferedImage scaledImage = new BufferedImage(scaledWidth, scaledHeight, BufferedImage.TYPE_INT_RGB);
+                Graphics2D g2 = scaledImage.createGraphics();
+                g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                g2.drawImage(image, 0, 0, scaledWidth, scaledHeight, null);
+                g2.dispose();
+                
+                currentImageIcon = new ImageIcon(scaledImage);
+            } else {
+                currentImageIcon = new ImageIcon(image);
+            }
+            
+            if (avatarLabel != null) {
+                avatarLabel.repaint();
+            }
+            
+            System.out.println("[CardInfoPage] Image loaded successfully from URL");
+            return true;
+        } catch (Exception e) {
+            System.err.println("[CardInfoPage] Error loading image from URL: " + e.getMessage());
             e.printStackTrace();
             currentImageIcon = null;
             if (avatarLabel != null) {

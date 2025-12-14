@@ -28,6 +28,10 @@ app.use(morgan('dev'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// Static file serving - serve uploaded avatars
+const path = require('path');
+app.use('/uploads/avatars', express.static(path.join(__dirname, 'uploads/avatars')));
+
 // Initialize database and start server
 const initializeServer = async () => {
     try {

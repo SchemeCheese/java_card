@@ -180,6 +180,27 @@ exports.updateCard = async (req, res) => {
         const updates = req.body;
 
         // ⚠️ PIN fields no longer exist - PIN is stored on card only
+        
+        // Nếu có imagePath, lưu vào database
+        // imagePath có thể là:
+        // 1. Relative path từ uploads/avatars (đã upload lên server)
+        // 2. Hoặc full URL nếu đã có sẵn
+        if (updates.imagePath) {
+            // Nếu là relative path, giữ nguyên
+            // Nếu là absolute path từ client, convert thành relative path
+            const imagePath = updates.imagePath;
+            if (imagePath.startsWith('uploads/avatars/') || imagePath.startsWith('/uploads/avatars/')) {
+                // Đã là relative path, giữ nguyên
+                updates.imagePath = imagePath.replace(/^\/+/, ''); // Remove leading slashes
+            } else if (imagePath.includes('uploads/avatars/')) {
+                // Extract relative path
+                const match = imagePath.match(/uploads\/avatars\/[^\/]+$/);
+                if (match) {
+                    updates.imagePath = match[0];
+                }
+            }
+            // Nếu là URL (http://...), giữ nguyên
+        }
 
         const [updated] = await Card.update(updates, {
             where: { studentId }
@@ -206,6 +227,60 @@ exports.updateCard = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Lỗi khi cập nhật thông tin thẻ',
+            error: error.message
+        });
+    }
+};
+
+// Upload avatar image
+exports.uploadAvatar = async (req, res) => {
+    try {
+        const { studentId } = req.params;
+        
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                message: 'Không có file ảnh được upload'
+            });
+        }
+
+        // File đã được lưu bởi multer
+        // Tên file: studentId_timestamp.extension
+        const filename = req.file.filename;
+        const imagePath = `uploads/avatars/${filename}`;
+        
+        // Cập nhật imagePath vào database
+        const [updated] = await Card.update(
+            { imagePath: imagePath },
+            { where: { studentId } }
+        );
+
+        if (!updated) {
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy thẻ'
+            });
+        }
+
+        // Lấy card đã cập nhật
+        const card = await Card.findOne({ 
+            where: { studentId }
+        });
+
+        res.json({
+            success: true,
+            message: 'Upload ảnh đại diện thành công',
+            data: {
+                imagePath: imagePath,
+                imageUrl: `/uploads/avatars/${filename}`, // URL để truy cập ảnh
+                card: card
+            }
+        });
+    } catch (error) {
+        console.error('Upload avatar error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi khi upload ảnh đại diện',
             error: error.message
         });
     }

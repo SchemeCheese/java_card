@@ -11,12 +11,13 @@ import java.util.concurrent.TimeUnit;
  * Base HTTP client for API calls
  */
 public class ApiClient {
-    private static final String BASE_URL = "http://localhost:3000/api";
+    public static final String BASE_URL = "http://localhost:3000/api";
+    public static final String SERVER_URL = "http://localhost:3000"; // Base URL without /api
     private static final int CONNECT_TIMEOUT = 2;  // 2s đủ cho local connection
     private static final int READ_TIMEOUT = 5;      // 5s cho local API với MySQL (đủ cho queries phức tạp)
     
     private final OkHttpClient client;
-    private final Gson gson;
+    public final Gson gson; // Made public for CardApiService to use
     
     // Cache server availability để tránh gọi nhiều lần
     private Boolean cachedServerAvailable = null;

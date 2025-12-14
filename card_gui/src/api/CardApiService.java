@@ -185,6 +185,99 @@ public class CardApiService {
     }
     
     /**
+     * Upload avatar image to server
+     * @param studentId Student ID
+     * @param imageFile File to upload
+     * @return CardInfo with updated imagePath
+     */
+    public CardInfo uploadAvatar(String studentId, java.io.File imageFile) throws IOException {
+        try {
+            // Determine content type
+            String contentType = "image/jpeg";
+            String fileName = imageFile.getName().toLowerCase();
+            if (fileName.endsWith(".png")) {
+                contentType = "image/png";
+            } else if (fileName.endsWith(".gif")) {
+                contentType = "image/gif";
+            }
+            
+            // Create multipart request body
+            okhttp3.RequestBody fileBody = okhttp3.RequestBody.create(
+                    okhttp3.MediaType.parse(contentType),
+                    imageFile
+            );
+            
+            okhttp3.RequestBody requestBody = new okhttp3.MultipartBody.Builder()
+                    .setType(okhttp3.MultipartBody.FORM)
+                    .addFormDataPart("avatar", imageFile.getName(), fileBody)
+                    .build();
+            
+            // Build request with auth token
+            okhttp3.Request.Builder builder = new okhttp3.Request.Builder()
+                    .url(ApiClient.BASE_URL + "/cards/" + studentId + "/avatar")
+                    .post(requestBody);
+            
+            // Add auth header if token exists
+            String token = apiClient.getAuthToken();
+            if (token != null && !token.isEmpty()) {
+                builder.header("Authorization", "Bearer " + token);
+            }
+            
+            okhttp3.Request request = builder.build();
+            
+            // Execute request with longer timeout for file upload
+            okhttp3.OkHttpClient uploadClient = new okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS) // Upload có thể lâu hơn
+                    .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .build();
+            
+            try (okhttp3.Response response = uploadClient.newCall(request).execute()) {
+                String responseBody = response.body() != null ? response.body().string() : "";
+                
+                ApiClient.ApiResponse apiResponse = new ApiClient.ApiResponse();
+                apiResponse.setStatusCode(response.code());
+                apiResponse.setSuccess(response.isSuccessful());
+                
+                if (!responseBody.isEmpty()) {
+                    try {
+                        com.google.gson.Gson gson = new com.google.gson.Gson();
+                        com.google.gson.JsonObject json = gson.fromJson(responseBody, com.google.gson.JsonObject.class);
+                        apiResponse.setData(json);
+                        apiResponse.setMessage(json.has("message") ? json.get("message").getAsString() : "");
+                    } catch (Exception e) {
+                        apiResponse.setRawResponse(responseBody);
+                    }
+                }
+                
+                if (!apiResponse.isSuccess()) {
+                    throw new IOException("Failed to upload avatar: " + apiResponse.getMessage());
+                }
+                
+                // Parse response
+                if (apiResponse.getData() != null && apiResponse.getData().has("data")) {
+                    com.google.gson.JsonObject data = apiResponse.getData().getAsJsonObject("data");
+                    if (data.has("card")) {
+                        return parseCardFromJson(data.getAsJsonObject("card"));
+                    } else if (data.has("imagePath")) {
+                        // Update cardInfo with new imagePath
+                        CardInfo card = getCard(studentId);
+                        if (card != null) {
+                            String imagePath = data.get("imagePath").getAsString();
+                            card.setImagePath(imagePath);
+                            return card;
+                        }
+                    }
+                }
+                
+                throw new IOException("Invalid response from server");
+            }
+        } catch (Exception e) {
+            throw new IOException("Failed to upload avatar: " + e.getMessage(), e);
+        }
+    }
+    
+     /**
      * Delete card
      */
     public boolean deleteCard(String studentId) throws IOException {
@@ -275,6 +368,11 @@ public class CardApiService {
             // RSA public key
             if (json.has("rsaPublicKey") && !json.get("rsaPublicKey").isJsonNull()) {
                 card.setRsaPublicKey(json.get("rsaPublicKey").getAsString());
+            }
+            
+            // Image path
+            if (json.has("imagePath") && !json.get("imagePath").isJsonNull()) {
+                card.setImagePath(json.get("imagePath").getAsString());
             }
             
             System.out.println("[CardApiService] Parsed card: " + card.getStudentId() + " - " + card.getHolderName());
