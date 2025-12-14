@@ -1,6 +1,7 @@
 package pages;
 
 import api.ApiServiceManager;
+import api.AuthApiService;
 import api.CardApiService;
 import applet.AppletConstants;
 import constants.AppConstants;
@@ -29,6 +30,7 @@ public class PinPage extends JPanel {
     private SimulatorService simulatorService;
     private ApiServiceManager apiManager;
     private CardApiService cardApi;
+    private AuthApiService authApi;
     private JLabel statusLabel;
     private JLabel triesLabel;
 
@@ -48,6 +50,7 @@ public class PinPage extends JPanel {
         this.simulatorService = simulatorService;
         this.apiManager = ApiServiceManager.getInstance();
         this.cardApi = apiManager.getCardApiService();
+        this.authApi = new AuthApiService();
 
         setLayout(new BorderLayout());
         setBackground(AppConstants.BACKGROUND);
@@ -588,6 +591,33 @@ public class PinPage extends JPanel {
                                 boolean rsaAuthenticated = authenticateCardWithRSA(studentCode);
                                 if (rsaAuthenticated) {
                                     System.out.println("[RSA AUTH] ✓ Authentication successful for student: " + studentCode);
+                                    
+                                    // Sau khi verify RSA thành công ở client, gọi API login để lấy token
+                                    if (apiManager != null && apiManager.isServerAvailable()) {
+                                        try {
+                                            System.out.println("[AUTH] Calling server login API to get token...");
+                                            // Generate challenge và signature để gửi lên server
+                                            byte[] challenge = utils.RSAUtility.generateChallenge();
+                                            byte[] signature = simulatorService.signRSAChallenge(challenge);
+                                            
+                                            // Gọi API login
+                                            String token = authApi.login(studentCode, challenge, signature);
+                                            if (token != null && !token.isEmpty()) {
+                                                System.out.println("[AUTH] ✓ Token received from server");
+                                                // Token đã được set vào ApiClient trong AuthApiService
+                                                // Share token với các API services khác
+                                                apiManager.setAuthToken(token);
+                                            } else {
+                                                System.out.println("[AUTH] ✗ Failed to get token from server");
+                                            }
+                                        } catch (Exception loginEx) {
+                                            System.out.println("[AUTH] ✗ Error calling login API: " + loginEx.getMessage());
+                                            loginEx.printStackTrace();
+                                            // Không block login nếu API call fail
+                                        }
+                                    } else {
+                                        System.out.println("[AUTH] Server not available, skipping token request");
+                                    }
                                 } else {
                                     // Keypair exists but verification failed - possible fake card
                                     System.out.println("[RSA AUTH] ✗ Authentication FAILED for student: " + studentCode);
@@ -675,24 +705,26 @@ public class PinPage extends JPanel {
                     simulatorService.setCurrentRole("Admin");
                     simulatorService.setPinVerified(true);
                     
-                    // RSA Authentication (optional for admin)
-                    try {
-                        if (simulatorService.isConnected()) {
-                            boolean hasRSAKey = checkRSAKeyExists(studentCode);
-                            if (hasRSAKey) {
-                                boolean rsaAuthenticated = authenticateCardWithRSA(studentCode);
-                                if (rsaAuthenticated) {
-                                    System.out.println("RSA authentication successful for admin");
-                                } else {
-                                    System.out.println("RSA authentication failed for admin");
-                                }
+                    // Admin không cần RSA authentication, nhưng vẫn cần token để gọi API
+                    System.out.println("Admin login successful (CT060132)");
+                    
+                    // Gọi API login để lấy token (admin bypass RSA verification)
+                    if (apiManager != null && apiManager.isServerAvailable()) {
+                        try {
+                            System.out.println("[AUTH] Calling server login API for admin...");
+                            // Admin login - không cần challenge/signature, server sẽ bypass
+                            String token = authApi.login(studentCode, new byte[16], new byte[128]);
+                            if (token != null && !token.isEmpty()) {
+                                System.out.println("[AUTH] ✓ Token received for admin");
+                                apiManager.setAuthToken(token);
                             } else {
-                                System.out.println("RSA keypair not found for admin - skipping authentication");
+                                System.out.println("[AUTH] ✗ Failed to get token for admin");
                             }
+                        } catch (Exception loginEx) {
+                            System.out.println("[AUTH] ✗ Error calling login API for admin: " + loginEx.getMessage());
+                            loginEx.printStackTrace();
+                            // Không block login nếu API call fail
                         }
-                    } catch (Exception rsaEx) {
-                        // RSA authentication is optional, continue anyway
-                        System.out.println("RSA authentication error: " + rsaEx.getMessage());
                     }
                     
                     setVerifiedState();

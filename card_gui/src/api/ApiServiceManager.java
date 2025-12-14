@@ -54,5 +54,22 @@ public class ApiServiceManager {
     public boolean isServerAvailable() {
         return apiClient.isServerAvailable();
     }
+    
+    /**
+     * Set authentication token for all API services
+     */
+    public void setAuthToken(String token) {
+        apiClient.setAuthToken(token);
+        // Note: Each service has its own ApiClient instance, so we need to set token for each
+        // For now, we'll set it on the shared apiClient and services should use it
+        // TODO: Refactor to use shared ApiClient instance
+    }
+    
+    /**
+     * Clear authentication token
+     */
+    public void clearAuthToken() {
+        apiClient.clearAuthToken();
+    }
 }
 

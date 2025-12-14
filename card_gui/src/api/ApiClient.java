@@ -23,6 +23,9 @@ public class ApiClient {
     private long lastCheckTime = 0;
     private static final long CACHE_DURATION_MS = 5000; // Cache 5 giây
     
+    // JWT Token storage - static để share giữa tất cả ApiClient instances
+    private static String sharedAuthToken = null;
+    
     public ApiClient() {
         this.client = new OkHttpClient.Builder()
                 .connectTimeout(CONNECT_TIMEOUT, TimeUnit.SECONDS)
@@ -32,13 +35,45 @@ public class ApiClient {
     }
     
     /**
+     * Set authentication token (shared across all ApiClient instances)
+     */
+    public void setAuthToken(String token) {
+        sharedAuthToken = token;
+    }
+    
+    /**
+     * Clear authentication token
+     */
+    public void clearAuthToken() {
+        sharedAuthToken = null;
+    }
+    
+    /**
+     * Get current authentication token
+     */
+    public String getAuthToken() {
+        return sharedAuthToken;
+    }
+    
+    /**
+     * Add Authorization header to request if token exists
+     */
+    private Request.Builder addAuthHeader(Request.Builder builder) {
+        if (sharedAuthToken != null && !sharedAuthToken.isEmpty()) {
+            builder.header("Authorization", "Bearer " + sharedAuthToken);
+        }
+        return builder;
+    }
+    
+    /**
      * GET request
      */
     public ApiResponse get(String endpoint) throws IOException {
-        Request request = new Request.Builder()
+        Request.Builder builder = new Request.Builder()
                 .url(BASE_URL + endpoint)
-                .get()
-                .build();
+                .get();
+        addAuthHeader(builder);
+        Request request = builder.build();
         
         return executeRequest(request);
     }
@@ -52,10 +87,11 @@ public class ApiClient {
             url += "?" + queryParams;
         }
         
-        Request request = new Request.Builder()
+        Request.Builder builder = new Request.Builder()
                 .url(url)
-                .get()
-                .build();
+                .get();
+        addAuthHeader(builder);
+        Request request = builder.build();
         
         return executeRequest(request);
     }
@@ -70,10 +106,11 @@ public class ApiClient {
                 jsonBody
         );
         
-        Request request = new Request.Builder()
+        Request.Builder builder = new Request.Builder()
                 .url(BASE_URL + endpoint)
-                .post(requestBody)
-                .build();
+                .post(requestBody);
+        addAuthHeader(builder);
+        Request request = builder.build();
         
         return executeRequest(request);
     }
@@ -88,10 +125,11 @@ public class ApiClient {
                 jsonBody
         );
         
-        Request request = new Request.Builder()
+        Request.Builder builder = new Request.Builder()
                 .url(BASE_URL + endpoint)
-                .put(requestBody)
-                .build();
+                .put(requestBody);
+        addAuthHeader(builder);
+        Request request = builder.build();
         
         return executeRequest(request);
     }
@@ -106,10 +144,11 @@ public class ApiClient {
                 jsonBody
         );
         
-        Request request = new Request.Builder()
+        Request.Builder builder = new Request.Builder()
                 .url(BASE_URL + endpoint)
-                .patch(requestBody)
-                .build();
+                .patch(requestBody);
+        addAuthHeader(builder);
+        Request request = builder.build();
         
         return executeRequest(request);
     }
@@ -118,10 +157,11 @@ public class ApiClient {
      * DELETE request
      */
     public ApiResponse delete(String endpoint) throws IOException {
-        Request request = new Request.Builder()
+        Request.Builder builder = new Request.Builder()
                 .url(BASE_URL + endpoint)
-                .delete()
-                .build();
+                .delete();
+        addAuthHeader(builder);
+        Request request = builder.build();
         
         return executeRequest(request);
     }

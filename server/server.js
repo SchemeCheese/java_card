@@ -12,6 +12,7 @@ process.env.TZ = process.env.TZ || 'Asia/Ho_Chi_Minh';
 const { sequelize, testConnection, syncDatabase } = require('./models');
 
 // Import routes
+const authRoutes = require('./routes/authRoutes');
 const cardRoutes = require('./routes/cardRoutes');
 const bookInventoryRoutes = require('./routes/bookInventoryRoutes');
 const bookRoutes = require('./routes/bookRoutes');
@@ -42,6 +43,7 @@ const initializeServer = async () => {
         await syncDatabase(false);
 
         // Routes
+        app.use('/api/auth', authRoutes);                    // Authentication routes
         app.use('/api/cards', cardRoutes);
         app.use('/api/library/books', bookInventoryRoutes);  // Quản lý sách trong thư viện
         app.use('/api/books', bookRoutes);                   // Mượn/trả sách
