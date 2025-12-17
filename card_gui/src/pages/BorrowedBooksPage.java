@@ -122,6 +122,35 @@ public class BorrowedBooksPage extends JPanel {
 
         borrowedTable = new JTable(borrowedModel);
         setupTableStyle(borrowedTable);
+        
+        // Custom renderer để highlight overdue books màu đỏ - ONLY for text columns (not checkbox)
+        DefaultTableCellRenderer overdueRenderer = new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value,
+                    boolean isSelected, boolean hasFocus, int row, int column) {
+                Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                
+                if (!isSelected) {
+                    // Check if this row is overdue by parsing due date
+                    String dueDate = (String) table.getValueAt(row, 3); // Hạn Trả column
+                    boolean isOverdue = checkIfOverdue(dueDate);
+                    
+                    if (isOverdue) {
+                        c.setBackground(new Color(254, 242, 242)); // Light red background
+                        c.setForeground(new Color(185, 28, 28)); // Dark red text
+                    } else {
+                        c.setBackground(Color.WHITE);
+                        c.setForeground(AppConstants.TEXT_PRIMARY);
+                    }
+                }
+                return c;
+            }
+        };
+        
+        // Apply renderer to text columns only (skip checkbox column 0)
+        for (int i = 1; i < borrowedTable.getColumnCount(); i++) {
+            borrowedTable.getColumnModel().getColumn(i).setCellRenderer(overdueRenderer);
+        }
 
         // Chỉnh độ rộng cột checkbox nhỏ lại
         borrowedTable.getColumnModel().getColumn(0).setMaxWidth(40);
@@ -218,9 +247,31 @@ public class BorrowedBooksPage extends JPanel {
         catalogTable.getColumnModel().getColumn(0).setMaxWidth(40);
         catalogTable.getColumnModel().getColumn(1).setMaxWidth(80);
 
-        // Sorter cho tìm kiếm
+        // Sorter cho tìm kiếm và sort columns
         catalogSorter = new TableRowSorter<>(catalogModel);
         catalogTable.setRowSorter(catalogSorter);
+        
+        // Enable sort icons on column headers
+        catalogTable.getTableHeader().setDefaultRenderer(new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value,
+                    boolean isSelected, boolean hasFocus, int row, int column) {
+                JLabel label = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                label.setFont(new Font("Segoe UI", Font.BOLD, 12));
+                label.setForeground(AppConstants.TEXT_PRIMARY);
+                label.setBackground(new Color(249, 250, 251));
+                label.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, AppConstants.BORDER_COLOR));
+                label.setHorizontalAlignment(SwingConstants.LEFT);
+                
+                // Add sort indicator
+                java.util.List<? extends RowSorter.SortKey> sortKeys = catalogTable.getRowSorter().getSortKeys();
+                if (sortKeys.size() > 0 && sortKeys.get(0).getColumn() == table.convertColumnIndexToModel(column)) {
+                    String arrow = sortKeys.get(0).getSortOrder() == SortOrder.ASCENDING ? " ↑" : " ↓";
+                    label.setText(value + arrow);
+                }
+                return label;
+            }
+        });
 
         JScrollPane scroll = new JScrollPane(catalogTable);
         scroll.setBorder(BorderFactory.createLineBorder(AppConstants.BORDER_COLOR));
@@ -522,14 +573,58 @@ public class BorrowedBooksPage extends JPanel {
     // --- Helper Styling Table ---
     private void setupTableStyle(JTable table) {
         table.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        table.setForeground(AppConstants.TEXT_PRIMARY);
+        table.setBackground(Color.WHITE);
         table.setRowHeight(35);
         table.setShowGrid(false);
         table.setIntercellSpacing(new Dimension(0, 0));
         table.setSelectionBackground(new Color(239, 246, 255));
+        table.setSelectionForeground(AppConstants.TEXT_PRIMARY);
 
         JTableHeader header = table.getTableHeader();
         header.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        header.setForeground(AppConstants.TEXT_PRIMARY);
         header.setBackground(new Color(249, 250, 251));
         header.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, AppConstants.BORDER_COLOR));
+    }
+    
+    /**
+     * Check if a book is overdue based on due date string (DD/MM/YYYY or YYYY-MM-DD format)
+     */
+    private boolean checkIfOverdue(String dueDateStr) {
+        if (dueDateStr == null || dueDateStr.trim().isEmpty()) {
+            return false;
+        }
+        
+        try {
+            java.time.LocalDate dueDate;
+            
+            // Parse date - support both DD/MM/YYYY and YYYY-MM-DD formats
+            if (dueDateStr.contains("/")) {
+                // DD/MM/YYYY format
+                String[] parts = dueDateStr.split("/");
+                if (parts.length == 3) {
+                    int day = Integer.parseInt(parts[0]);
+                    int month = Integer.parseInt(parts[1]);
+                    int year = Integer.parseInt(parts[2]);
+                    dueDate = java.time.LocalDate.of(year, month, day);
+                } else {
+                    return false;
+                }
+            } else if (dueDateStr.contains("-")) {
+                // YYYY-MM-DD format
+                dueDate = java.time.LocalDate.parse(dueDateStr);
+            } else {
+                return false;
+            }
+            
+            // Check if overdue
+            java.time.LocalDate today = java.time.LocalDate.now();
+            return dueDate.isBefore(today);
+            
+        } catch (Exception e) {
+            System.err.println("[BorrowedBooksPage] Error parsing due date: " + dueDateStr);
+            return false;
+        }
     }
 }

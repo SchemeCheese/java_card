@@ -20,16 +20,16 @@ public class CardApiService {
     }
     
     /**
-     * Create a new card
-     * Note: 
-     * - PIN is not sent to server - it should be set on the card (applet) only
-     * - Only studentId and holderName are required, other fields are optional
+     * Create a new card with full information
      */
-    public CardInfo createCard(String studentId, String holderName) throws IOException {
+    public CardInfo createCard(String studentId, String holderName, String email, String department, String birthDate, String address) throws IOException {
         JsonObject body = new JsonObject();
         body.addProperty("studentId", studentId);
         body.addProperty("holderName", holderName);
-        // email, department, birthDate, address are NOT sent to server - stored on card (applet) via AES encryption
+        body.addProperty("email", email != null ? email : "");
+        body.addProperty("department", department != null ? department : "");
+        body.addProperty("birthDate", birthDate != null ? birthDate : "");
+        body.addProperty("address", address != null ? address : "");
         // PIN is NOT sent to server - it should be set on card (applet) only for security
         
         ApiClient.ApiResponse response = apiClient.post("/cards", body);
@@ -39,6 +39,16 @@ public class CardApiService {
         }
         
         return parseCardFromJson(response.getData().getAsJsonObject("data"));
+    }
+    
+    /**
+     * Create a new card (backwards compatibility - only studentId and holderName)
+     * Note: 
+     * - PIN is not sent to server - it should be set on the card (applet) only
+     * - Only studentId and holderName are required, other fields are optional
+     */
+    public CardInfo createCard(String studentId, String holderName) throws IOException {
+        return createCard(studentId, holderName, "", "", "", "");
     }
     
     /**

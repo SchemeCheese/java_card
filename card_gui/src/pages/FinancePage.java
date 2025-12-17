@@ -39,6 +39,7 @@ public class FinancePage extends JPanel {
     private JLabel balanceValue;
     private DefaultTableModel historyModel;
     private DefaultTableModel finesModel;
+    private JTable finesTable; // Add reference to fines table
     private static final Color GOLD_COLOR = new Color(234, 179, 8);
     
     public FinancePage(SimulatorService simulatorService) {
@@ -165,7 +166,9 @@ public class FinancePage extends JPanel {
                 status = "Chưa thanh toán";
             }
 
-            finesModel.addRow(new Object[]{b.getBookId(), reason, amount, status});
+            // Add checkbox column (false by default), then other data
+            boolean canPay = !b.isFinePaid() && "Đã trả".equalsIgnoreCase(b.getStatus());
+            finesModel.addRow(new Object[]{canPay ? false : null, b.getBookId(), reason, amount, status});
         }
     }
     
@@ -392,25 +395,43 @@ public class FinancePage extends JPanel {
         header.add(leftHeader, BorderLayout.WEST);
         header.add(payBtn, BorderLayout.EAST);
         
-        // Table
-        String[] cols = {"Mã Sách", "Lý Do Phạt", "Số Tiền", "Trạng Thái"};
+        // Table with checkbox column
+        String[] cols = {"", "Mã Sách", "Lý Do Phạt", "Số Tiền", "Trạng Thái"};
         finesModel = new DefaultTableModel(cols, 0) {
             @Override
+            public Class<?> getColumnClass(int columnIndex) {
+                return columnIndex == 0 ? Boolean.class : String.class;
+            }
+            @Override
             public boolean isCellEditable(int row, int column) {
+                // Chỉ cho phép tick checkbox nếu chưa thanh toán và đã trả sách
+                if (column == 0) {
+                    String status = (String) getValueAt(row, 4);
+                    return !"Đã thanh toán".equals(status);
+                }
                 return false;
             }
         };
 
         JTable table = new JTable(finesModel);
+        this.finesTable = table; // Save reference
         table.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        table.setForeground(AppConstants.TEXT_PRIMARY);
+        table.setBackground(Color.WHITE);
         table.setRowHeight(45);
         table.setShowGrid(false);
+        table.setSelectionBackground(new Color(239, 246, 255));
+        table.setSelectionForeground(AppConstants.TEXT_PRIMARY);
         table.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 11));
         table.getTableHeader().setForeground(AppConstants.TEXT_SECONDARY);
         table.getTableHeader().setBackground(Color.WHITE);
         
+        // Set checkbox column width
+        table.getColumnModel().getColumn(0).setMaxWidth(40);
+        table.getColumnModel().getColumn(0).setMinWidth(40);
+        
         // Status renderer
-        table.getColumnModel().getColumn(3).setCellRenderer(new DefaultTableCellRenderer() {
+        table.getColumnModel().getColumn(4).setCellRenderer(new DefaultTableCellRenderer() {
             @Override
             public Component getTableCellRendererComponent(JTable t, Object val, 
                     boolean sel, boolean focus, int row, int col) {
@@ -420,6 +441,9 @@ public class FinancePage extends JPanel {
                     lbl.setForeground(new Color(22, 101, 52));
                 } else {
                     lbl.setForeground(new Color(220, 38, 38));
+                }
+                if (!sel) {
+                    lbl.setBackground(Color.WHITE);
                 }
                 return lbl;
             }
@@ -449,7 +473,7 @@ public class FinancePage extends JPanel {
         }
         summary.setText("Tổng: " + fmt.format(total) + " VND • Có thể thanh toán: " + payableCount + " khoản");
 
-        // Pay button handler
+        // Pay button handler - thanh toán các khoản đã chọn
         payBtn.addActionListener(e -> {
             if (!apiManager.isServerAvailable()) {
                 JOptionPane.showMessageDialog(this,
@@ -465,26 +489,44 @@ public class FinancePage extends JPanel {
                 return;
             }
 
-            boolean hasPayable = false;
-            for (BorrowedBook b : outstandingFines) {
-                if (!b.isFinePaid() && "Đã trả".equalsIgnoreCase(b.getStatus()) && b.getFine() > 0) {
-                    hasPayable = true;
-                    break;
+            // Thu thập các khoản phạt đã được chọn (checkbox = true)
+            List<BorrowedBook> selectedFines = new ArrayList<>();
+            for (int i = 0; i < finesTable.getRowCount(); i++) {
+                Object checkboxValue = finesTable.getValueAt(i, 0);
+                if (checkboxValue instanceof Boolean && (Boolean) checkboxValue) {
+                    // Tìm BorrowedBook tương ứng với dòng này
+                    String bookId = (String) finesTable.getValueAt(i, 1);
+                    for (BorrowedBook b : outstandingFines) {
+                        if (b.getBookId().equals(bookId) && !b.isFinePaid()) {
+                            selectedFines.add(b);
+                            break;
+                        }
+                    }
                 }
             }
-            if (!hasPayable) {
+
+            if (selectedFines.isEmpty()) {
                 JOptionPane.showMessageDialog(this,
-                    "Hiện chỉ hiển thị phí phạt tạm tính cho sách đang quá hạn.\nBạn cần trả sách trước để thanh toán tiền phạt.",
-                    "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                    "Vui lòng chọn ít nhất một khoản phạt để thanh toán.",
+                    "Thông báo", JOptionPane.WARNING_MESSAGE);
                 return;
             }
 
+            // Tính tổng tiền sẽ thanh toán
+            long totalAmount = 0;
+            for (BorrowedBook b : selectedFines) {
+                totalAmount += Math.max(0, b.getFine());
+            }
+
             int confirm = JOptionPane.showConfirmDialog(this,
-                "Bạn có muốn thanh toán tất cả tiền phạt đang còn nợ không?",
+                String.format("Bạn có muốn thanh toán %d khoản phạt?\nTổng tiền: %,d VND", 
+                    selectedFines.size(), totalAmount),
                 "Xác nhận", JOptionPane.YES_NO_OPTION);
             if (confirm != JOptionPane.YES_OPTION) return;
 
             try {
+                // Note: Server API hiện chỉ hỗ trợ thanh toán TẤT CẢ phạt cùng lúc
+                // TODO: Cần thêm API endpoint để thanh toán từng khoản riêng lẻ
                 FinePaymentResult result = bookApi.payOutstandingFines(studentCode);
 
                 // Refresh balance + transactions
@@ -506,9 +548,8 @@ public class FinancePage extends JPanel {
                 summary.setText("Tổng: " + fmt.format(newTotal) + " VND • Có thể thanh toán: " + newPayable + " khoản");
 
                 JOptionPane.showMessageDialog(this,
-                    (result.getMessage() != null && !result.getMessage().isEmpty() ? result.getMessage() : "Thanh toán phạt thành công") +
-                        "\nSố tiền đã trả: " + String.format("%,d VND", result.getTotalPaid()) +
-                        "\nSố dư mới: " + String.format("%,d VND", result.getBalanceAfter()),
+                    String.format("Thanh toán thành công!\nSố khoản đã thanh toán: %d\nSố tiền đã trả: %,d VND\nSố dư mới: %,d VND", 
+                        result.getPaidCount(), result.getTotalPaid(), result.getBalanceAfter()),
                     "Thành công", JOptionPane.INFORMATION_MESSAGE);
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(this,

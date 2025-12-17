@@ -339,9 +339,8 @@ public class SettingsPage extends JPanel {
                 // Step 2: Save card info to server (with RSA public key if available)
                 if (apiManager != null && apiManager.isServerAvailable()) {
                     try {
-                        // Create card on server (only studentId and holderName)
-                        // email, department, birthDate, address are stored on card (applet) via AES encryption, not on server
-                        cardApi.createCard(studentId, name);
+                        // Create card on server with full information
+                        cardApi.createCard(studentId, name, email, department, birthDate, address);
                         
                         // Update RSA public key if available
                         if (publicKeyPEM != null) {
@@ -392,9 +391,8 @@ public class SettingsPage extends JPanel {
                 boolean serverSaved = false;
                 if (apiManager != null && apiManager.isServerAvailable()) {
                     try {
-                        // Create card on server (only studentId and holderName)
-                        // email, department, birthDate, address are stored on card (applet) via AES encryption, not on server
-                        cardApi.createCard(studentId, name);
+                        // Create card on server with full information
+                        cardApi.createCard(studentId, name, email, department, birthDate, address);
                         addActivityLog("Lưu thẻ lên server", studentId, "Thành công");
                         serverSaved = true;
                     } catch (Exception apiEx) {

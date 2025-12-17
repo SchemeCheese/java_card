@@ -167,10 +167,12 @@ public class SimulatorService {
                 return false;
             }
             
-            // Step 3: Update memory (optional, for display)
+            // Step 3: Update memory and save to cardList
             CardInfo card = getCardByStudentCode(studentCode);
             if (card != null) {
                 card.setPin(newPin);
+                // Ensure the updated card is saved in cardList
+                addCardToList(card);
             }
             
             return true;
