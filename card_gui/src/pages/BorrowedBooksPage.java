@@ -107,8 +107,8 @@ public class BorrowedBooksPage extends JPanel {
         header.add(borrowedCountLabel, BorderLayout.EAST);
 
         // 2. Table
-        // Cột 0: Checkbox (Boolean), Cột 1: Mã, Cột 2: Tên, Cột 3: Hạn Trả
-        String[] cols = {"", "Mã", "Tên Sách", "Hạn Trả"};
+        // Cột 0: Checkbox (Boolean), Cột 1: Mã, Cột 2: Tên, Cột 3: Hạn Trả, Cột 4: ID (ẩn)
+        String[] cols = {"", "Mã", "Tên Sách", "Hạn Trả", "ID"};
         borrowedModel = new DefaultTableModel(cols, 0) {
             @Override
             public Class<?> getColumnClass(int columnIndex) {
@@ -128,11 +128,9 @@ public class BorrowedBooksPage extends JPanel {
         borrowedTable.getColumnModel().getColumn(1).setMaxWidth(80);
         
         // Ẩn cột ID (index 4) - chỉ dùng để lưu borrowId
-        if (borrowedTable.getColumnCount() > 4) {
-            borrowedTable.getColumnModel().getColumn(4).setMinWidth(0);
-            borrowedTable.getColumnModel().getColumn(4).setMaxWidth(0);
-            borrowedTable.getColumnModel().getColumn(4).setWidth(0);
-        }
+        borrowedTable.getColumnModel().getColumn(4).setMinWidth(0);
+        borrowedTable.getColumnModel().getColumn(4).setMaxWidth(0);
+        borrowedTable.getColumnModel().getColumn(4).setWidth(0);
 
         JScrollPane scroll = new JScrollPane(borrowedTable);
         scroll.setBorder(BorderFactory.createLineBorder(AppConstants.BORDER_COLOR));
@@ -262,11 +260,25 @@ public class BorrowedBooksPage extends JPanel {
         // 1. Load borrowed books từ API hoặc SimulatorService
         if (apiManager.isServerAvailable()) {
             try {
-                currentBorrowed = bookApi.getBorrowedBooksByStudent(studentCode, "Đang mượn", 1, 100);
+                // Include both active statuses so overdue books still appear in "Sách Đang Mượn"
+                List<BorrowedBook> borrowing = bookApi.getBorrowedBooksByStudent(studentCode, "Đang mượn", 1, 100);
+                List<BorrowedBook> overdue = bookApi.getBorrowedBooksByStudent(studentCode, "Quá hạn", 1, 100);
+                currentBorrowed = new ArrayList<>();
+                if (borrowing != null) currentBorrowed.addAll(borrowing);
+                if (overdue != null) {
+                    for (BorrowedBook b : overdue) {
+                        boolean exists = false;
+                        for (BorrowedBook x : currentBorrowed) {
+                            if (x.getId() == b.getId() && x.getId() != 0) { exists = true; break; }
+                            if (x.getId() == 0 && b.getId() == 0 && x.getBookId().equalsIgnoreCase(b.getBookId())) { exists = true; break; }
+                        }
+                        if (!exists) currentBorrowed.add(b);
+                    }
+                }
             } catch (Exception e) {
                 System.err.println("[BorrowedBooksPage] Error loading borrowed books from API");
                 System.err.println("[BorrowedBooksPage] Student ID: " + studentCode);
-                System.err.println("[BorrowedBooksPage] Status filter: Đang mượn");
+                System.err.println("[BorrowedBooksPage] Status filter: Đang mượn + Quá hạn");
                 System.err.println("[BorrowedBooksPage] Error: " + e.getMessage());
                 System.err.println("[BorrowedBooksPage] Using fallback to SimulatorService");
                 // Fallback
@@ -420,21 +432,32 @@ public class BorrowedBooksPage extends JPanel {
                     try {
                         // Lấy borrowId từ cột ẩn (index 4) hoặc tìm từ API
                         int borrowId = -1;
-                        if (borrowedTable.getColumnCount() > 4) {
-                            Object idObj = borrowedTable.getValueAt(i, 4);
-                            if (idObj != null && idObj instanceof Integer) {
+                        Object idObj = borrowedTable.getValueAt(i, 4);
+                        if (idObj != null) {
+                            if (idObj instanceof Integer) {
                                 borrowId = (Integer) idObj;
+                            } else {
+                                try {
+                                    borrowId = Integer.parseInt(idObj.toString());
+                                } catch (Exception ignored) {}
                             }
                         }
                         
                         // Nếu không có trong table, tìm từ API
                         if (borrowId <= 0) {
-                            List<BorrowedBook> borrowed = bookApi.getBorrowedBooksByStudent(
+                            List<BorrowedBook> borrowing = bookApi.getBorrowedBooksByStudent(
                                 studentCode, "Đang mượn", 1, 100
                             );
-                            
-                            for (BorrowedBook b : borrowed) {
-                                if (b.getBookId().equals(bookId) && b.getId() > 0) {
+                            List<BorrowedBook> overdue = bookApi.getBorrowedBooksByStudent(
+                                studentCode, "Quá hạn", 1, 100
+                            );
+
+                            List<BorrowedBook> combined = new ArrayList<>();
+                            if (borrowing != null) combined.addAll(borrowing);
+                            if (overdue != null) combined.addAll(overdue);
+
+                            for (BorrowedBook b : combined) {
+                                if (b != null && b.getBookId().equals(bookId) && b.getId() > 0) {
                                     borrowId = b.getId();
                                     break;
                                 }
@@ -487,7 +510,7 @@ public class BorrowedBooksPage extends JPanel {
         if (count > 0) {
             String msg = "Đã trả " + count + " cuốn sách.";
             if (hasFine) {
-                msg += "\nBạn đã thanh toán phí phạt trễ hạn: " + String.format("%,d", totalFine) + " VND";
+                msg += "Hãy tiến hành thanh toán phí phạt trễ hạn: " + String.format("%,d", totalFine) + " VND";
             }
             JOptionPane.showMessageDialog(this, msg, "Thành công", JOptionPane.INFORMATION_MESSAGE);
             refreshData(); // Refresh để chuyển sách từ Trái về Phải

@@ -1,10 +1,13 @@
 package pages;
 
 import api.ApiServiceManager;
+import api.BookApiService;
 import api.CardApiService;
 import api.TransactionApiService;
 import constants.AppConstants;
+import models.BorrowedBook;
 import models.CardInfo;
+import models.FinePaymentResult;
 import models.Transaction;
 import service.SimulatorService;
 import ui.RoundedBorder;
@@ -27,23 +30,28 @@ public class FinancePage extends JPanel {
     private SimulatorService simulatorService;
     private ApiServiceManager apiManager;
     private CardApiService cardApi;
+    private BookApiService bookApi;
     private TransactionApiService transactionApi;
     private String studentCode;
     private long balance;
     private List<Transaction> transactions;
+    private List<BorrowedBook> outstandingFines;
     private JLabel balanceValue;
     private DefaultTableModel historyModel;
+    private DefaultTableModel finesModel;
     private static final Color GOLD_COLOR = new Color(234, 179, 8);
     
     public FinancePage(SimulatorService simulatorService) {
         this.simulatorService = simulatorService;
         this.apiManager = ApiServiceManager.getInstance();
         this.cardApi = apiManager.getCardApiService();
+        this.bookApi = apiManager.getBookApiService();
         this.transactionApi = apiManager.getTransactionApiService();
         this.studentCode = simulatorService.getCurrentStudentCode();
         
         // Load data từ API hoặc SimulatorService
         loadFinanceData();
+        loadOutstandingFines();
         
         setLayout(new BorderLayout());
         setBackground(AppConstants.BACKGROUND);
@@ -111,18 +119,71 @@ public class FinancePage extends JPanel {
         this.balance = simulatorService.getBalance(studentCode);
         this.transactions = new ArrayList<>(simulatorService.getTransactions(studentCode));
     }
+
+    /**
+     * Load outstanding fines from API (server-backed).
+     */
+    private void loadOutstandingFines() {
+        this.outstandingFines = new ArrayList<>();
+
+        if (!apiManager.isServerAvailable()) {
+            return;
+        }
+
+        try {
+            List<BorrowedBook> fines = bookApi.getOutstandingFinesByStudent(studentCode);
+            if (fines != null) {
+                this.outstandingFines = fines;
+            }
+            if (finesModel != null) {
+                refreshFinesTable();
+            }
+        } catch (Exception e) {
+            System.err.println("Error loading outstanding fines from API: " + e.getMessage());
+        }
+    }
+
+    private void refreshFinesTable() {
+        if (finesModel == null) return;
+        finesModel.setRowCount(0);
+
+        NumberFormat fmt = NumberFormat.getInstance(new Locale("vi", "VN"));
+        for (BorrowedBook b : outstandingFines) {
+            String reason;
+            if (b.getOverdueDays() > 0) {
+                reason = "Trả sách muộn (" + b.getOverdueDays() + " ngày)";
+            } else {
+                reason = "Phí phạt";
+            }
+            String amount = fmt.format(Math.max(0, b.getFine())) + " VND";
+            String status;
+            if ("Quá hạn".equalsIgnoreCase(b.getStatus())) {
+                status = "Tạm tính (chưa trả sách)";
+            } else if (b.isFinePaid()) {
+                status = "Đã thanh toán";
+            } else {
+                status = "Chưa thanh toán";
+            }
+
+            finesModel.addRow(new Object[]{b.getBookId(), reason, amount, status});
+        }
+    }
     
     /**
      * Refresh history table
      */
     private void refreshHistoryTable() {
         if (historyModel == null) return;
-        
         historyModel.setRowCount(0);
         NumberFormat fmt = NumberFormat.getInstance(new Locale("vi", "VN"));
         for (Transaction t : transactions) {
-            String amtStr = (t.getAmount() >= 0 ? "+ " : "- ") +
-                fmt.format(Math.abs(t.getAmount())) + " VND";
+            String amtStr;
+            boolean isFine = "Trả phạt".equalsIgnoreCase(t.getType());
+            if (isFine) {
+                amtStr = "- " + fmt.format(Math.abs(t.getAmount())) + " VND";
+            } else {
+                amtStr = (t.getAmount() >= 0 ? "+ " : "- ") + fmt.format(Math.abs(t.getAmount())) + " VND";
+            }
             historyModel.addRow(new Object[]{t.getDate(), t.getType(), amtStr, t.getStatus()});
         }
     }
@@ -312,23 +373,35 @@ public class FinancePage extends JPanel {
         JLabel title = new JLabel("Tiền Phạt Cần Thanh Toán");
         title.setFont(new Font("Segoe UI", Font.BOLD, 16));
         title.setForeground(AppConstants.TEXT_PRIMARY);
+
+        JLabel summary = new JLabel("");
+        summary.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        summary.setForeground(AppConstants.TEXT_SECONDARY);
         
         JButton payBtn = createButton("Thanh Toán Phạt", AppConstants.DANGER_COLOR, Color.WHITE, 160, 38);
         
-        header.add(title, BorderLayout.WEST);
+        JPanel leftHeader = new JPanel();
+        leftHeader.setLayout(new BoxLayout(leftHeader, BoxLayout.Y_AXIS));
+        leftHeader.setBackground(Color.WHITE);
+        title.setAlignmentX(Component.LEFT_ALIGNMENT);
+        summary.setAlignmentX(Component.LEFT_ALIGNMENT);
+        leftHeader.add(title);
+        leftHeader.add(Box.createVerticalStrut(4));
+        leftHeader.add(summary);
+
+        header.add(leftHeader, BorderLayout.WEST);
         header.add(payBtn, BorderLayout.EAST);
         
         // Table
         String[] cols = {"Mã Sách", "Lý Do Phạt", "Số Tiền", "Trạng Thái"};
-        Object[][] data = {
-            {"ISBN-9780321765723", "Trả sách muộn (5 ngày)", "25,000 VND", "Chưa thanh toán"},
-            {"ISBN-9781491904244", "Làm hỏng sách", "150,000 VND", "Chưa thanh toán"}
+        finesModel = new DefaultTableModel(cols, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
         };
-        
-        DefaultTableModel model = new DefaultTableModel(cols, 0);
-        for (Object[] row : data) model.addRow(row);
-        
-        JTable table = new JTable(model);
+
+        JTable table = new JTable(finesModel);
         table.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         table.setRowHeight(45);
         table.setShowGrid(false);
@@ -341,9 +414,13 @@ public class FinancePage extends JPanel {
             @Override
             public Component getTableCellRendererComponent(JTable t, Object val, 
                     boolean sel, boolean focus, int row, int col) {
-                JLabel lbl = new JLabel(val.toString());
+                JLabel lbl = new JLabel(val != null ? val.toString() : "");
                 lbl.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-                lbl.setForeground(new Color(220, 38, 38));
+                if (val != null && val.toString().equals("Đã thanh toán")) {
+                    lbl.setForeground(new Color(22, 101, 52));
+                } else {
+                    lbl.setForeground(new Color(220, 38, 38));
+                }
                 return lbl;
             }
         });
@@ -354,6 +431,91 @@ public class FinancePage extends JPanel {
         
         panel.add(header, BorderLayout.NORTH);
         panel.add(scroll, BorderLayout.CENTER);
+
+        // Initial load
+        refreshFinesTable();
+
+        // Summary text
+        NumberFormat fmt = NumberFormat.getInstance(new Locale("vi", "VN"));
+        long total = 0;
+        int payableCount = 0;
+        if (outstandingFines != null) {
+            for (BorrowedBook b : outstandingFines) {
+                total += Math.max(0, b.getFine());
+                if (!b.isFinePaid() && "Đã trả".equalsIgnoreCase(b.getStatus()) && b.getFine() > 0) {
+                    payableCount++;
+                }
+            }
+        }
+        summary.setText("Tổng: " + fmt.format(total) + " VND • Có thể thanh toán: " + payableCount + " khoản");
+
+        // Pay button handler
+        payBtn.addActionListener(e -> {
+            if (!apiManager.isServerAvailable()) {
+                JOptionPane.showMessageDialog(this,
+                    "Chức năng thanh toán phạt cần kết nối server.",
+                    "Không thể thực hiện", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            if (outstandingFines == null || outstandingFines.isEmpty()) {
+                JOptionPane.showMessageDialog(this,
+                    "Bạn không có khoản phạt nào cần thanh toán.",
+                    "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+
+            boolean hasPayable = false;
+            for (BorrowedBook b : outstandingFines) {
+                if (!b.isFinePaid() && "Đã trả".equalsIgnoreCase(b.getStatus()) && b.getFine() > 0) {
+                    hasPayable = true;
+                    break;
+                }
+            }
+            if (!hasPayable) {
+                JOptionPane.showMessageDialog(this,
+                    "Hiện chỉ hiển thị phí phạt tạm tính cho sách đang quá hạn.\nBạn cần trả sách trước để thanh toán tiền phạt.",
+                    "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+
+            int confirm = JOptionPane.showConfirmDialog(this,
+                "Bạn có muốn thanh toán tất cả tiền phạt đang còn nợ không?",
+                "Xác nhận", JOptionPane.YES_NO_OPTION);
+            if (confirm != JOptionPane.YES_OPTION) return;
+
+            try {
+                FinePaymentResult result = bookApi.payOutstandingFines(studentCode);
+
+                // Refresh balance + transactions
+                loadFinanceData();
+                // Refresh fines list
+                loadOutstandingFines();
+
+                // Update summary
+                long newTotal = 0;
+                int newPayable = 0;
+                if (outstandingFines != null) {
+                    for (BorrowedBook b : outstandingFines) {
+                        newTotal += Math.max(0, b.getFine());
+                        if (!b.isFinePaid() && "Đã trả".equalsIgnoreCase(b.getStatus()) && b.getFine() > 0) {
+                            newPayable++;
+                        }
+                    }
+                }
+                summary.setText("Tổng: " + fmt.format(newTotal) + " VND • Có thể thanh toán: " + newPayable + " khoản");
+
+                JOptionPane.showMessageDialog(this,
+                    (result.getMessage() != null && !result.getMessage().isEmpty() ? result.getMessage() : "Thanh toán phạt thành công") +
+                        "\nSố tiền đã trả: " + String.format("%,d VND", result.getTotalPaid()) +
+                        "\nSố dư mới: " + String.format("%,d VND", result.getBalanceAfter()),
+                    "Thành công", JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this,
+                    "Lỗi khi thanh toán phạt: " + ex.getMessage(),
+                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+            }
+        });
         
         return panel;
     }
@@ -427,8 +589,15 @@ public class FinancePage extends JPanel {
                     boolean sel, boolean focus, int row, int col) {
                 JLabel lbl = new JLabel(val.toString());
                 lbl.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-                lbl.setForeground(val.toString().startsWith("+") ? 
-                    AppConstants.SUCCESS_COLOR : AppConstants.DANGER_COLOR);
+                String type = t.getValueAt(row, 1).toString();
+                if ("Trả phạt".equalsIgnoreCase(type)) {
+                    lbl.setForeground(AppConstants.DANGER_COLOR); // Always red for fines
+                } else if ("Nạp tiền".equalsIgnoreCase(type)) {
+                    lbl.setForeground(AppConstants.SUCCESS_COLOR); // Always green for topup
+                } else {
+                    // Default: use sign
+                    lbl.setForeground(val.toString().startsWith("+") ? AppConstants.SUCCESS_COLOR : AppConstants.DANGER_COLOR);
+                }
                 return lbl;
             }
         });

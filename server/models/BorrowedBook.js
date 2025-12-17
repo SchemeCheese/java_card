@@ -54,6 +54,17 @@ const BorrowedBook = sequelize.define('BorrowedBook', {
     fine: {
         type: DataTypes.BIGINT,
         defaultValue: 0
+    },
+    finePaid: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: 'fine_paid'
+    },
+    finePaidAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'fine_paid_at'
     }
 }, {
     tableName: 'borrowed_books',
@@ -73,8 +84,8 @@ const BorrowedBook = sequelize.define('BorrowedBook', {
     ],
     hooks: {
         beforeSave: async (borrowedBook) => {
-            // Calculate overdue if status is "Đang mượn" and past due date
-            if (borrowedBook.status === 'Đang mượn' && new Date() > borrowedBook.dueDate) {
+            // Calculate overdue if past due date (keep updated for both "Đang mượn" and "Quá hạn")
+            if ((borrowedBook.status === 'Đang mượn' || borrowedBook.status === 'Quá hạn') && new Date() > borrowedBook.dueDate) {
                 borrowedBook.status = 'Quá hạn';
                 const diffTime = Math.abs(new Date() - borrowedBook.dueDate);
                 borrowedBook.overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));

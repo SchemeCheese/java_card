@@ -2,6 +2,153 @@ const { BorrowedBook, Card, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const { parsePagination, formatPaginatedResponse } = require('../utils/pagination');
 
+// Get outstanding fines by student
+exports.getOutstandingFinesByStudent = async (req, res) => {
+    try {
+        const { studentId } = req.params;
+
+        if (!studentId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Vui lòng cung cấp mã sinh viên'
+            });
+        }
+
+        const fines = await BorrowedBook.findAll({
+            where: {
+                studentId,
+                status: { [Op.in]: ['Quá hạn', 'Đã trả'] },
+                fine: { [Op.gt]: 0 },
+                finePaid: false
+            },
+            order: [[sequelize.col('updated_at'), 'DESC']]
+        });
+
+        return res.json({
+            success: true,
+            data: fines
+        });
+    } catch (error) {
+        console.error('Get outstanding fines error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi khi lấy danh sách tiền phạt',
+            error: error.message
+        });
+    }
+};
+
+// Pay all outstanding fines for a student
+exports.payOutstandingFines = async (req, res) => {
+    const t = await sequelize.transaction();
+    try {
+        const { studentId } = req.body;
+
+        if (!studentId) {
+            await t.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Vui lòng cung cấp mã sinh viên'
+            });
+        }
+
+        const card = await Card.findOne({
+            where: { studentId },
+            transaction: t,
+            lock: t.LOCK.UPDATE
+        });
+
+        if (!card) {
+            await t.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy thẻ'
+            });
+        }
+
+        // Only allow paying fines for returned books. Overdue (not returned) fines are still accruing.
+        const fineRows = await BorrowedBook.findAll({
+            where: {
+                studentId,
+                status: 'Đã trả',
+                fine: { [Op.gt]: 0 },
+                finePaid: false
+            },
+            transaction: t,
+            lock: t.LOCK.UPDATE
+        });
+
+        const totalPaid = fineRows.reduce((sum, row) => sum + parseInt(row.fine || 0), 0);
+        const paidCount = fineRows.length;
+
+        if (totalPaid <= 0) {
+            await t.commit();
+            return res.json({
+                success: true,
+                message: 'Không có tiền phạt cần thanh toán (chỉ thanh toán được khi đã trả sách)',
+                data: {
+                    totalPaid: 0,
+                    paidCount: 0,
+                    balanceAfter: parseInt(card.balance)
+                }
+            });
+        }
+
+        const balanceBefore = parseInt(card.balance);
+        if (balanceBefore < totalPaid) {
+            await t.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Số dư không đủ để thanh toán tiền phạt'
+            });
+        }
+
+        const balanceAfter = balanceBefore - totalPaid;
+
+        const { Transaction } = require('../models');
+        await Transaction.create({
+            studentId,
+            type: 'Trả phạt',
+            amount: totalPaid,
+            balanceBefore,
+            balanceAfter,
+            status: 'Thành công',
+            description: `Thanh toán tiền phạt (${paidCount} khoản)`
+        }, { transaction: t });
+
+        card.balance = balanceAfter;
+        await card.save({ transaction: t });
+
+        const now = new Date();
+        await BorrowedBook.update(
+            { finePaid: true, finePaidAt: now },
+            {
+                where: { id: { [Op.in]: fineRows.map(r => r.id) } },
+                transaction: t
+            }
+        );
+
+        await t.commit();
+        return res.json({
+            success: true,
+            message: 'Thanh toán phạt thành công',
+            data: {
+                totalPaid,
+                paidCount,
+                balanceAfter
+            }
+        });
+    } catch (error) {
+        try { await t.rollback(); } catch (_) {}
+        console.error('Pay outstanding fines error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi khi thanh toán tiền phạt',
+            error: error.message
+        });
+    }
+};
+
 // Borrow a book
 exports.borrowBook = async (req, res) => {
     try {
@@ -117,8 +264,11 @@ exports.returnBook = async (req, res) => {
         const dueDate = new Date(borrowedBook.dueDate);
         
         if (now > dueDate) {
-            const diffTime = Math.abs(now - dueDate);
-            const overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            // Calculate days difference using only date part (ignore time)
+            const startDate = new Date(dueDate.getFullYear(), dueDate.getMonth(), dueDate.getDate());
+            const endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const diffTime = endDate - startDate;
+            const overdueDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
             borrowedBook.overdueDays = overdueDays;
             borrowedBook.fine = overdueDays * 5000; // 5000 VND per day
         }
@@ -175,10 +325,10 @@ exports.getBorrowedBooksByStudent = async (req, res) => {
             offset
         });
 
-        // Update overdue status
+        // Update overdue status / fine (keep it updated even if status already "Quá hạn")
         const now = new Date();
         for (let book of result.rows) {
-            if (book.status === 'Đang mượn' && now > book.dueDate) {
+            if ((book.status === 'Đang mượn' || book.status === 'Quá hạn') && now > book.dueDate) {
                 book.status = 'Quá hạn';
                 const diffTime = Math.abs(now - book.dueDate);
                 book.overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));

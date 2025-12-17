@@ -4,12 +4,14 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import models.BorrowedBook;
+import models.FinePaymentResult;
 
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.net.URLEncoder;
 
 /**
  * API Service for Book borrowing operations
@@ -53,6 +55,60 @@ public class BookApiService {
         
         return parseBorrowedBookFromJson(response.getData().getAsJsonObject("data").getAsJsonObject("borrowedBook"));
     }
+
+    /**
+     * Get outstanding fines (returned books with unpaid fine) by student
+     */
+    public List<BorrowedBook> getOutstandingFinesByStudent(String studentId) throws IOException {
+        ApiClient.ApiResponse response = apiClient.get("/books/fines/student/" + studentId);
+
+        if (!response.isSuccess()) {
+            throw new IOException("Failed to get outstanding fines: " + response.getMessage());
+        }
+
+        List<BorrowedBook> fines = new ArrayList<>();
+        JsonArray dataArray = response.getData().getAsJsonArray("data");
+        if (dataArray == null) return fines;
+
+        for (JsonElement element : dataArray) {
+            BorrowedBook b = parseBorrowedBookFromJson(element.getAsJsonObject());
+            if (b != null) fines.add(b);
+        }
+
+        return fines;
+    }
+
+    /**
+     * Pay all outstanding fines for a student
+     */
+    public FinePaymentResult payOutstandingFines(String studentId) throws IOException {
+        JsonObject body = new JsonObject();
+        body.addProperty("studentId", studentId);
+
+        ApiClient.ApiResponse response = apiClient.post("/books/fines/pay", body);
+
+        if (!response.isSuccess()) {
+            throw new IOException("Failed to pay fines: " + response.getMessage());
+        }
+
+        String message = response.getMessage();
+        long totalPaid = 0;
+        int paidCount = 0;
+        long balanceAfter = 0;
+
+        try {
+            JsonObject data = response.getData().getAsJsonObject("data");
+            if (data != null) {
+                if (data.has("totalPaid")) totalPaid = data.get("totalPaid").getAsLong();
+                if (data.has("paidCount")) paidCount = data.get("paidCount").getAsInt();
+                if (data.has("balanceAfter")) balanceAfter = data.get("balanceAfter").getAsLong();
+            }
+        } catch (Exception ignored) {
+            // Keep defaults
+        }
+
+        return new FinePaymentResult(totalPaid, paidCount, balanceAfter, message);
+    }
     
     /**
      * Get borrowed books by student with pagination
@@ -60,7 +116,7 @@ public class BookApiService {
     public List<BorrowedBook> getBorrowedBooksByStudent(String studentId, String status, int page, int limit) throws IOException {
         StringBuilder queryParams = new StringBuilder("page=" + page + "&limit=" + limit);
         if (status != null && !status.isEmpty()) {
-            queryParams.append("&status=").append(status);
+            queryParams.append("&status=").append(URLEncoder.encode(status, "UTF-8"));
         }
         
         ApiClient.ApiResponse response = apiClient.get("/books/student/" + studentId, queryParams.toString());
@@ -85,7 +141,7 @@ public class BookApiService {
     public List<BorrowedBook> getAllBorrowedBooks(String status, int page, int limit) throws IOException {
         StringBuilder queryParams = new StringBuilder("page=" + page + "&limit=" + limit);
         if (status != null && !status.isEmpty()) {
-            queryParams.append("&status=").append(status);
+            queryParams.append("&status=").append(URLEncoder.encode(status, "UTF-8"));
         }
         
         ApiClient.ApiResponse response = apiClient.get("/books", queryParams.toString());
@@ -124,8 +180,17 @@ public class BookApiService {
             String dueDate = json.has("dueDate") ? formatDate(json.get("dueDate").getAsString()) : "";
             String status = json.has("status") ? json.get("status").getAsString() : "Đang mượn";
             int overdueDays = json.has("overdueDays") ? json.get("overdueDays").getAsInt() : 0;
-            
-            return new BorrowedBook(id, bookId, bookName, borrowDate, dueDate, status, overdueDays);
+
+            BorrowedBook book = new BorrowedBook(id, bookId, bookName, borrowDate, dueDate, status, overdueDays);
+
+            if (json.has("fine")) {
+                try { book.setFine(json.get("fine").getAsLong()); } catch (Exception ignored) {}
+            }
+            if (json.has("finePaid")) {
+                try { book.setFinePaid(json.get("finePaid").getAsBoolean()); } catch (Exception ignored) {}
+            }
+
+            return book;
         } catch (Exception e) {
             e.printStackTrace();
             return null;

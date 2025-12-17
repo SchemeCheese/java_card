@@ -11,6 +11,8 @@ public class BorrowedBook {
     private String dueDate;
     private String status;
     private int overdueDays;
+    private long fine;
+    private boolean finePaid;
 
     public BorrowedBook(String bookId, String bookName, String borrowDate, String dueDate, String status, int overdueDays) {
         this.id = 0; // Default, will be set from API
@@ -20,6 +22,8 @@ public class BorrowedBook {
         this.dueDate = dueDate;
         this.status = status;
         this.overdueDays = overdueDays;
+        this.fine = 0;
+        this.finePaid = false;
     }
     
     public BorrowedBook(int id, String bookId, String bookName, String borrowDate, String dueDate, String status, int overdueDays) {
@@ -30,6 +34,24 @@ public class BorrowedBook {
         this.dueDate = dueDate;
         this.status = status;
         this.overdueDays = overdueDays;
+        this.fine = 0;
+        this.finePaid = false;
+    }
+
+    public long getFine() {
+        return fine;
+    }
+
+    public void setFine(long fine) {
+        this.fine = fine;
+    }
+
+    public boolean isFinePaid() {
+        return finePaid;
+    }
+
+    public void setFinePaid(boolean finePaid) {
+        this.finePaid = finePaid;
     }
 
     public String getBookId() {
