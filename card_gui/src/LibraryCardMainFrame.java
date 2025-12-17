@@ -46,7 +46,7 @@ public class LibraryCardMainFrame extends JFrame {
         initSampleData();
         initializeUI();
         setSize(1400, 900);
-        setDefaultCloseOperation(JFrame.Ect060132XIT_ON_CLOSE);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
         
         // Pre-check server availability trong background để cache sớm
