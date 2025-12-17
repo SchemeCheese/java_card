@@ -167,7 +167,11 @@ public class TransactionApiService {
             String description = json.has("description") ? json.get("description").getAsString() : type;
             long amount = json.has("amount") ? json.get("amount").getAsLong() : 0;
             String status = json.has("status") ? json.get("status").getAsString() : "Thành công";
-            
+
+            // Ensure 'Trả phạt' is always negative
+            if ("Trả phạt".equalsIgnoreCase(type) && amount > 0) {
+                amount = -amount;
+            }
             return new Transaction(date, type, amount, status);
         } catch (Exception e) {
             e.printStackTrace();

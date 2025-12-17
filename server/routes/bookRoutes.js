@@ -8,12 +8,15 @@ const authController = require('../controllers/authController');
 router.post('/borrow', authController.authenticate, bookController.borrowBook);
 router.patch('/return/:borrowId', authController.authenticate, bookController.returnBook);
 router.get('/student/:studentId', authController.authenticate, bookController.getBorrowedBooksByStudent);
+router.post('/fines/pay', authController.authenticate, bookController.payOutstandingFines);
+router.get(
+  '/fines/student/:studentId',
+  authController.authenticate,
+  bookController.getOutstandingFinesByStudent
+);
 
 // Admin only routes (chỉ admin mới được truy cập)
 router.get('/', authController.authenticateAdmin, bookController.getAllBorrowedBooks); // Xem tất cả sách đã mượn - admin only
 router.delete('/:borrowId', authController.authenticateAdmin, bookController.deleteBorrowedBook); // Xóa record mượn sách - admin only
 
 module.exports = router;
-
-
-
