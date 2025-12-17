@@ -52,6 +52,7 @@ exports.createCard = async (req, res) => {
 
         // Validate required fields - chỉ cần studentId và holderName
         if (!studentId || !holderName) {
+            console.log('Vui lòng cung cấp MSSV và Họ tên');
             return res.status(400).json({
                 success: false,
                 message: 'Vui lòng cung cấp MSSV và Họ tên'
@@ -61,6 +62,7 @@ exports.createCard = async (req, res) => {
         // Check if card already exists
         const existingCard = await Card.findOne({ where: { studentId } });
         if (existingCard) {
+            console.log('Thẻ với MSSV này đã tồn tại');
             return res.status(400).json({
                 success: false,
                 message: 'Thẻ với MSSV này đã tồn tại'
