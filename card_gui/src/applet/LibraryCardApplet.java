@@ -46,6 +46,29 @@ public class LibraryCardApplet extends Applet {
 
         byte[] buffer = apdu.getBuffer();
         byte ins = buffer[ISO7816.OFFSET_INS];
+        byte p1 = buffer[ISO7816.OFFSET_P1];
+
+        // Support legacy format: INS=0x31 with P1 to distinguish PIN commands
+        // Format: 80 31 P1 00 Lc [Data]
+        // P1: 0x01=VERIFY, 0x02=CHANGE, 0x03=CREATE, 0x04=RESET
+        if (ins == (byte)0x31) {
+            switch (p1) {
+                case 0x01: // VERIFY_PIN
+                    pinManager.verifyPin(apdu);
+                    return;
+                case 0x02: // CHANGE_PIN
+                    pinManager.changePin(apdu);
+                    return;
+                case 0x03: // CREATE_PIN
+                    pinManager.createPin(apdu);
+                    return;
+                case 0x04: // RESET_PIN
+                    pinManager.resetPin(apdu);
+                    return;
+                default:
+                    ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
+            }
+        }
 
         switch (ins) {
             // PIN Management

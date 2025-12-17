@@ -112,4 +112,5 @@ Server: Verify signature với Public Key
 - [Key Generation](./key-generation.md)
 - [Authentication Flow](./authentication-flow.md)
 - [Challenge-Response](./challenge-response.md)
+- [Detailed Authentication Flow](./detailed-authentication-flow.md) - Giải thích chi tiết từng hàm và Modulus/Exponent
 

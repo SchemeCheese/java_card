@@ -48,7 +48,13 @@ public class PinManager {
         }
 
         byte[] buffer = apdu.getBuffer();
-        apdu.setIncomingAndReceive();
+        short lc = apdu.setIncomingAndReceive();
+        
+        // Validate length: cần SALT (16) + HASH (32) = 48 bytes
+        short expectedLength = (short)(AppletConstants.SALT_LENGTH + AppletConstants.PIN_MAX_SIZE);
+        if (lc < expectedLength) {
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
 
         // Dữ liệu bắt đầu từ OFFSET_CDATA
         short offset = ISO7816.OFFSET_CDATA;
@@ -68,7 +74,12 @@ public class PinManager {
      */
     public void verifyPin(APDU apdu) {
         byte[] buffer = apdu.getBuffer();
-        apdu.setIncomingAndReceive();
+        short lc = apdu.setIncomingAndReceive();
+        
+        // Validate length: cần HASH (32 bytes)
+        if (lc < AppletConstants.PIN_MAX_SIZE) {
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
 
         // Client đã tính toán Hash(PIN, Salt) và gửi xuống
         // Thẻ chỉ việc so sánh Hash này với Hash đã lưu
@@ -95,7 +106,14 @@ public class PinManager {
         }
 
         byte[] buffer = apdu.getBuffer();
-        apdu.setIncomingAndReceive();
+        short lc = apdu.setIncomingAndReceive();
+        
+        // Validate length: cần SALT (16) + HASH (32) = 48 bytes
+        short expectedLength = (short)(AppletConstants.SALT_LENGTH + AppletConstants.PIN_MAX_SIZE);
+        if (lc < expectedLength) {
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
+        
         short offset = ISO7816.OFFSET_CDATA;
 
         // 1. Cập nhật Salt mới
@@ -124,7 +142,15 @@ public class PinManager {
      */
     public void resetPin(APDU apdu) {
         byte[] buffer = apdu.getBuffer();
-        apdu.setIncomingAndReceive();
+        short lc = apdu.setIncomingAndReceive();
+        
+        // Validate length: cần ADMIN_KEY (4) + SALT (16) + HASH (32) = 52 bytes
+        short expectedLength = (short)(AppletConstants.ADMIN_KEY.length + 
+                                       AppletConstants.SALT_LENGTH + 
+                                       AppletConstants.PIN_MAX_SIZE);
+        if (lc < expectedLength) {
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
 
         short offset = ISO7816.OFFSET_CDATA;
 
