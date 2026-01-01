@@ -1,0 +1,13 @@
+Mã Sách,Tên Sách,Tác Giả,ISBN,Nhà Xuất Bản,Năm XB,Thể Loại,Mô Tả,Số Lượng,Vị Trí
+TT001,Tư Duy Nhanh Và Chậm,Daniel Kahneman,978-604-2-0001,NXB Thế Giới,2022,Kỹ năng,Tâm lý học về quyết định,4,Kệ F1
+TT002,Atomic Habits,James Clear,978-604-2-0002,NXB Trẻ,2023,Kỹ năng,Thay đổi thói quen nhỏ tạo kết quả lớn,6,Kệ F2
+TT003,Bí Mật Tư Duy Triệu Phú,T. Harv Eker,978-604-2-0003,NXB Tổng Hợp,2021,Kỹ năng,Làm chủ trò chơi tiền bạc,3,Kệ F3
+VH003,Chiến Binh Cầu Vồng,Andrea Hirata,978-604-2-0004,NXB Hội Nhà Văn,2020,Văn học,Câu chuyện về ước mơ và giáo dục,5,Kệ A3
+VH004,Mắt Biếc,Nguyễn Nhật Ánh,978-604-2-0005,NXB Trẻ,2019,Văn học,Tình yêu tuổi học trò,7,Kệ A4
+VH005,Tôi Thấy Hoa Vàng Trên Cỏ Xanh,Nguyễn Nhật Ánh,978-604-2-0006,NXB Trẻ,2018,Văn học,Tuổi thơ miền quê Việt Nam,4,Kệ A5
+KH003,Cosmos,Carl Sagan,978-604-2-0007,NXB Khoa Học,2021,Khoa học,Hành trình khám phá vũ trụ,3,Kệ B3
+KH004,Gen Ích Kỷ,Richard Dawkins,978-604-2-0008,NXB Tri Thức,2022,Khoa học,Tiến hóa từ góc nhìn gen,2,Kệ B4
+CN004,Refactoring,Martin Fowler,978-0-13-475759-9,NXB Công Nghệ,2020,Công nghệ,Cải thiện thiết kế code hiện có,5,Kệ E4
+CN005,System Design Interview,Alex Xu,978-1-73647-342-1,NXB Công Nghệ,2023,Công nghệ,Chuẩn bị phỏng vấn thiết kế hệ thống,8,Kệ E5
+LS003,Sapiens Đồ Họa,Yuval Noah Harari,978-604-2-0009,NXB Tri Thức,2023,Lịch sử,Lịch sử loài người phiên bản đồ họa,4,Kệ D3
+LS004,Súng Vi Trùng Và Thép,Jared Diamond,978-604-2-0010,NXB Tổng Hợp,2021,Lịch sử,Lịch sử các xã hội loài người,3,Kệ D4

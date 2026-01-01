@@ -218,6 +218,10 @@ public class LibraryCardMainFrame extends JFrame {
             checkAdminAccess(); // Chỉ hiện dialog, không chuyển tab
         }));
 
+        tabLabels.put("bookManagement", createTab("", "Quản Lý Sách", false, () -> {
+            checkBookManagementAccess(); // Chỉ Admin
+        }));
+
         tabLabels.values().forEach(tabsPanel::add);
 
         return tabsPanel;
@@ -274,6 +278,30 @@ public class LibraryCardMainFrame extends JFrame {
         updateTabHighlights(tabLabels.get("settings"));
     }
 
+    // Hàm kiểm tra quyền Admin cho tab Quản Lý Sách
+    private void checkBookManagementAccess() {
+        if (!simulatorService.isPinVerified()) {
+            JOptionPane.showMessageDialog(this,
+                    "Vui lòng đăng nhập để truy cập chức năng này!",
+                    "Yêu cầu xác thực", JOptionPane.WARNING_MESSAGE);
+            showPinPage();
+            updateTabHighlights(tabLabels.get("pin"));
+            return;
+        }
+
+        // Kiểm tra role là Admin
+        if (!"Admin".equals(simulatorService.getCurrentRole())) {
+            JOptionPane.showMessageDialog(this,
+                    "Chỉ Admin mới có quyền truy cập Quản Lý Sách!",
+                    "Không có quyền", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Nếu là Admin, chuyển đến trang Book Management
+        showBookManagementPage();
+        updateTabHighlights(tabLabels.get("bookManagement"));
+    }
+
     private JLabel createTab(String icon, String text, boolean active, Runnable onClick) {
         String tabText = icon.isEmpty() ? text : icon + " " + text;
         JLabel tab = new JLabel(tabText);
@@ -295,8 +323,8 @@ public class LibraryCardMainFrame extends JFrame {
                     return;
                 }
 
-                // Nếu tab Hệ Thống mà không phải Admin, không highlight
-                if (text.equals("Hệ Thống") && !"Admin".equals(simulatorService.getCurrentRole())) {
+                // Nếu tab Hệ Thống hoặc Quản Lý Sách mà không phải Admin, không highlight
+                if ((text.equals("Hệ Thống") || text.equals("Quản Lý Sách")) && !"Admin".equals(simulatorService.getCurrentRole())) {
                     return;
                 }
 
@@ -388,6 +416,15 @@ public class LibraryCardMainFrame extends JFrame {
         mainContentPanel.removeAll();
         SettingsPage settingsPage = new SettingsPage(simulatorService);
         mainContentPanel.add(settingsPage);
+        mainContentPanel.revalidate();
+        mainContentPanel.repaint();
+    }
+
+    private void showBookManagementPage() {
+        currentPage = "bookManagement";
+        mainContentPanel.removeAll();
+        BookManagementPage bookManagementPage = new BookManagementPage(simulatorService);
+        mainContentPanel.add(bookManagementPage);
         mainContentPanel.revalidate();
         mainContentPanel.repaint();
     }

@@ -40,10 +40,40 @@ public class BookInventoryApiService {
         }
         
         List<BookInfo> books = new ArrayList<>();
-        JsonArray dataArray = response.getData().getAsJsonArray("data");
+        
+        // Handle null or empty data
+        JsonObject responseData = response.getData();
+        if (responseData == null) {
+            System.out.println("[BookInventoryApi] No response data");
+            return books;
+        }
+        
+        // Check if "data" field exists and is an array
+        if (!responseData.has("data")) {
+            System.out.println("[BookInventoryApi] Response has no 'data' field");
+            return books;
+        }
+        
+        JsonElement dataElement = responseData.get("data");
+        if (dataElement == null || dataElement.isJsonNull()) {
+            System.out.println("[BookInventoryApi] 'data' field is null");
+            return books;
+        }
+        
+        if (!dataElement.isJsonArray()) {
+            System.out.println("[BookInventoryApi] 'data' is not an array: " + dataElement.getClass().getSimpleName());
+            return books;
+        }
+        
+        JsonArray dataArray = dataElement.getAsJsonArray();
+        System.out.println("[BookInventoryApi] Found " + dataArray.size() + " books");
         
         for (JsonElement element : dataArray) {
-            books.add(parseBookFromJson(element.getAsJsonObject()));
+            try {
+                books.add(parseBookFromJson(element.getAsJsonObject()));
+            } catch (Exception e) {
+                System.err.println("[BookInventoryApi] Error parsing book: " + e.getMessage());
+            }
         }
         
         return books;
@@ -150,19 +180,39 @@ public class BookInventoryApiService {
      */
     private BookInfo parseBookFromJson(JsonObject json) {
         BookInfo book = new BookInfo();
-        book.setBookId(json.has("bookId") ? json.get("bookId").getAsString() : "");
-        book.setTitle(json.has("title") ? json.get("title").getAsString() : "");
-        book.setAuthor(json.has("author") ? json.get("author").getAsString() : "");
-        book.setIsbn(json.has("isbn") ? json.get("isbn").getAsString() : "");
-        book.setPublisher(json.has("publisher") ? json.get("publisher").getAsString() : "");
-        book.setPublishYear(json.has("publishYear") ? json.get("publishYear").getAsInt() : 0);
-        book.setCategory(json.has("category") ? json.get("category").getAsString() : "");
-        book.setDescription(json.has("description") ? json.get("description").getAsString() : "");
-        book.setTotalCopies(json.has("totalCopies") ? json.get("totalCopies").getAsInt() : 0);
-        book.setAvailableCopies(json.has("availableCopies") ? json.get("availableCopies").getAsInt() : 0);
-        book.setStatus(json.has("status") ? json.get("status").getAsString() : "Có sẵn");
-        book.setLocation(json.has("location") ? json.get("location").getAsString() : "");
+        book.setBookId(getStringOrDefault(json, "bookId", ""));
+        book.setTitle(getStringOrDefault(json, "title", ""));
+        book.setAuthor(getStringOrDefault(json, "author", ""));
+        book.setIsbn(getStringOrDefault(json, "isbn", ""));
+        book.setPublisher(getStringOrDefault(json, "publisher", ""));
+        book.setPublishYear(getIntOrDefault(json, "publishYear", 0));
+        book.setCategory(getStringOrDefault(json, "category", ""));
+        book.setDescription(getStringOrDefault(json, "description", ""));
+        book.setTotalCopies(getIntOrDefault(json, "totalCopies", 0));
+        book.setAvailableCopies(getIntOrDefault(json, "availableCopies", 0));
+        book.setStatus(getStringOrDefault(json, "status", "Có sẵn"));
+        book.setLocation(getStringOrDefault(json, "location", ""));
         return book;
+    }
+    
+    /**
+     * Safely get string from JSON, handling null values
+     */
+    private String getStringOrDefault(JsonObject json, String key, String defaultValue) {
+        if (!json.has(key)) return defaultValue;
+        JsonElement element = json.get(key);
+        if (element == null || element.isJsonNull()) return defaultValue;
+        return element.getAsString();
+    }
+    
+    /**
+     * Safely get int from JSON, handling null values
+     */
+    private int getIntOrDefault(JsonObject json, String key, int defaultValue) {
+        if (!json.has(key)) return defaultValue;
+        JsonElement element = json.get(key);
+        if (element == null || element.isJsonNull()) return defaultValue;
+        return element.getAsInt();
     }
     
     /**
