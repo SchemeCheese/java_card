@@ -359,8 +359,8 @@ public class CardInfoPage extends JPanel {
                             // Update cardInfo với imagePath từ server
                             this.cardInfo = updated;
                             
-                            // Load ảnh từ server URL
-                            String imageUrl = api.ApiClient.SERVER_URL + "/" + updated.getImagePath();
+                            // Load ảnh từ decryption endpoint
+                            String imageUrl = api.ApiClient.SERVER_URL + "/api/cards/" + studentCode + "/avatar";
                             loadImageFromUrl(imageUrl);
                             
                             // Update local service
@@ -426,8 +426,15 @@ public class CardInfoPage extends JPanel {
             
             // Check if it's a server path (starts with uploads/avatars/)
             if (imagePath.startsWith("uploads/avatars/") || imagePath.startsWith("/uploads/avatars/")) {
-                String url = api.ApiClient.SERVER_URL + "/" + imagePath.replaceAll("^/+", "");
-                return loadImageFromUrl(url);
+                // Use decryption endpoint instead of direct file access
+                String studentId = cardInfo != null ? cardInfo.getStudentId() : null;
+                if (studentId != null) {
+                    String url = api.ApiClient.SERVER_URL + "/api/cards/" + studentId + "/avatar";
+                    return loadImageFromUrl(url);
+                } else {
+                    System.err.println("[CardInfoPage] Cannot load avatar: studentId is null");
+                    return false;
+                }
             }
             
             // Local file path
