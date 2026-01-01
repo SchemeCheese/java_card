@@ -8,6 +8,9 @@ require('dotenv').config();
 // Nếu muốn dùng UTC, comment dòng này
 process.env.TZ = process.env.TZ || 'Asia/Ho_Chi_Minh';
 
+// Import logger (phải import sau dotenv.config())
+const { logger, morganStream } = require('./config/logger');
+
 // Import database and models
 const { sequelize, testConnection, syncDatabase } = require('./models');
 
@@ -18,13 +21,15 @@ const bookInventoryRoutes = require('./routes/bookInventoryRoutes');
 const bookRoutes = require('./routes/bookRoutes');
 const transactionRoutes = require('./routes/transactionRoutes');
 const pinRoutes = require('./routes/pinRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
+const oauthRoutes = require('./routes/oauthRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(morgan('dev'));
+app.use(morgan('combined', { stream: morganStream })); // Log HTTP requests to file
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -53,6 +58,8 @@ const initializeServer = async () => {
         app.use('/api/books', bookRoutes);                   // Mượn/trả sách
         app.use('/api/transactions', transactionRoutes);
         app.use('/api/pin', pinRoutes);
+        app.use('/api/payment', paymentRoutes);              // VietQR payment routes
+        app.use('/api/oauth', oauthRoutes);                  // OAuth 2.0 for webhook
 
         // Health check endpoint
         app.get('/api/health', (req, res) => {
@@ -87,13 +94,19 @@ const initializeServer = async () => {
 
         // Start server
         app.listen(PORT, () => {
-            console.log(`Server is running on http://localhost:${PORT}`);
-            console.log(`Environment: ${process.env.NODE_ENV}`);
-            console.log(`Database: MySQL (${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME})`);
+            logger.info(`Server is running on http://localhost:${PORT}`);
+            logger.info(`Environment: ${process.env.NODE_ENV}`);
+            logger.info(`Timezone: ${process.env.TZ}`);
+            logger.info(`SEPAY Configuration: 
+        - API Key: ${process.env.SEPAY_API_KEY ? 'Set ✅' : 'Missing ❌'}
+        - OAuth Client ID: ${process.env.OAUTH_CLIENT_ID ? 'Set ✅' : 'Missing ❌'}
+    `);
+            logger.info(`Database: MySQL (${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME})`);
+            logger.info(`Logs directory: ${require('path').join(__dirname, 'logs')}`);
         });
 
     } catch (error) {
-        console.error('Failed to initialize server:', error);
+        logger.error('Failed to initialize server:', error);
         process.exit(1);
     }
 };

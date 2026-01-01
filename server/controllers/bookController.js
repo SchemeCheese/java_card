@@ -96,39 +96,14 @@ exports.payOutstandingFines = async (req, res) => {
         data: {
           totalPaid: 0,
           paidCount: 0,
-          balanceAfter: parseInt(card.balance),
         },
       });
     }
 
-    const balanceBefore = parseInt(card.balance);
-    if (balanceBefore < totalPaid) {
-      await t.rollback();
-      return res.status(400).json({
-        success: false,
-        message: 'Số dư không đủ để thanh toán tiền phạt',
-      });
-    }
-
-    const balanceAfter = balanceBefore - totalPaid;
-
-    const { Transaction } = require('../models');
-    await Transaction.create(
-      {
-        studentId,
-        type: 'Trả phạt',
-        amount: totalPaid,
-        balanceBefore,
-        balanceAfter,
-        status: 'Thành công',
-        description: `Thanh toán tiền phạt (${paidCount} khoản)`,
-      },
-      { transaction: t }
-    );
-
-    card.balance = balanceAfter;
-    await card.save({ transaction: t });
-
+    // [REMOVED] Balance check - Balance is now managed on card only
+    // Client will handle balance validation and deduction
+    
+    // Mark fines as paid
     const now = new Date();
     await BorrowedBook.update(
       { finePaid: true, finePaidAt: now },
@@ -145,7 +120,6 @@ exports.payOutstandingFines = async (req, res) => {
       data: {
         totalPaid,
         paidCount,
-        balanceAfter,
       },
     });
   } catch (error) {
