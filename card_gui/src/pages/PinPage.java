@@ -802,6 +802,8 @@ public class PinPage extends JPanel {
                         "Đổi PIN thành công!\nVui lòng đăng nhập lại với PIN mới.", 
                         "Thành công", JOptionPane.INFORMATION_MESSAGE);
                     clearPinFields();
+                    // Reset trạng thái để user phải login lại
+                    simulatorService.setPinVerified(false);
                     setUnverifiedState();
                 } else {
                     JOptionPane.showMessageDialog(this, 

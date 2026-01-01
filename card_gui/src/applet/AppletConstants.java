@@ -23,6 +23,10 @@ public class AppletConstants {
     public static final byte INS_SET_CARD_INFO = (byte)0x40;
     public static final byte INS_GET_CARD_INFO = (byte)0x50;
 
+    // INS codes - Balance Management (Encrypted)
+    public static final byte INS_GET_BALANCE = (byte)0xD0;
+    public static final byte INS_UPDATE_BALANCE = (byte)0xD1;
+
     // INS codes - Book Management
     public static final byte INS_ADD_BORROWED_BOOK = (byte)0x60;
     public static final byte INS_GET_BORROWED_BOOKS = (byte)0x70;

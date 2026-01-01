@@ -310,7 +310,7 @@ public class SimulatorService {
         for (models.BorrowedBook b : books) {
             if (b.getBookId().equalsIgnoreCase(bookId)) {
                 toRemove = b;
-                fine = b.getOverdueDays() * 5000;
+                fine = b.getOverdueDays() * 50; // 50 VND per day (reduced 100x)
                 break;
             }
         }
@@ -336,33 +336,134 @@ public class SimulatorService {
         return null;
     }
 
-    // --- QUẢN LÝ TÀI CHÍNH ---
+    // --- QUẢN LÝ TÀI CHÍNH (AES Encrypted on Card) ---
     private java.util.Map<String, java.util.List<models.Transaction>> studentTransactions = new java.util.HashMap<>();
 
-    public boolean deposit(String studentCode, long amount) {
-        CardInfo card = getCardByStudentCode(studentCode);
-        if (card == null) return false;
-        card.setBalance(card.getBalance() + amount);
+    private long getBalanceFromCard() throws Exception {
+        if (!isConnected) throw new Exception("Chưa kết nối thẻ");
+        
+        byte[] cmd = {0x00, AppletConstants.INS_GET_BALANCE, 0x00, 0x00, 0x00};
+        byte[] resp = sendCommand(cmd);
+        
+        if (getSW(resp) != 0x9000) {
+           throw new Exception("Lỗi lấy số dư từ thẻ: " + String.format("%04X", getSW(resp)));
+        }
+        
+        // Response: [ENCRYPTED_BALANCE (16 bytes)]
+        byte[] encryptedBalance = new byte[16];
+        System.arraycopy(resp, 0, encryptedBalance, 0, 16);
+        
+        long balance = AESUtility.decryptBalance(encryptedBalance);
+        
+        // [FIX] Kiểm tra balance có hợp lệ không
+        // Nếu balance > 100 tỷ VND hoặc < 0, coi như chưa khởi tạo → trả về 0
+        // Balance sẽ được khởi tạo khi user nạp tiền lần đầu (sau khi verify PIN)
+        if (balance < 0 || balance > 100_000_000_000L) {
+            return 0;
+        }
+        
+        return balance;
+    }
 
-        java.time.LocalDate today = java.time.LocalDate.now();
-        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
-        java.util.List<models.Transaction> transactions = studentTransactions.getOrDefault(studentCode, new java.util.ArrayList<>());
-        transactions.add(0, new models.Transaction(today.format(fmt), "Nạp tiền", amount, "Thành công"));
-        studentTransactions.put(studentCode, transactions);
-        return true;
+    private void updateBalanceOnCard(long newBalance) throws Exception {
+        if (!isConnected) throw new Exception("Chưa kết nối thẻ");
+        
+        byte[] encryptedBalance = AESUtility.encryptBalance(newBalance);
+        
+        // Cmd: [CLA] [INS] [P1] [P2] [Lc] [Data]
+        byte[] cmd = new byte[5 + 16];
+        cmd[0] = 0x00;
+        cmd[1] = AppletConstants.INS_UPDATE_BALANCE;
+        cmd[2] = 0x00;
+        cmd[3] = 0x00;
+        cmd[4] = 0x10; // 16 bytes
+        System.arraycopy(encryptedBalance, 0, cmd, 5, 16);
+        
+        byte[] resp = sendCommand(cmd);
+        if (getSW(resp) != 0x9000) {
+            throw new Exception("Lỗi cập nhật số dư lên thẻ: " + String.format("%04X", getSW(resp)));
+        }
+    }
+
+    public boolean deposit(String studentCode, long amount) {
+        try {
+            long currentBalance = 0;
+            // Ưu tiên lấy từ thẻ nếu có kết nối
+            if (isConnected && isPinVerified) {
+                currentBalance = getBalanceFromCard();
+            } else {
+                CardInfo card = getCardByStudentCode(studentCode);
+                if (card != null) currentBalance = card.getBalance();
+            }
+
+            long newBalance = currentBalance + amount;
+
+            // Ghi lại vào thẻ
+            if (isConnected && isPinVerified) {
+                updateBalanceOnCard(newBalance);
+            }
+
+            // Update memory cache & Log transaction
+            CardInfo card = getCardByStudentCode(studentCode);
+            if (card != null) card.setBalance(newBalance);
+
+            java.time.LocalDate today = java.time.LocalDate.now();
+            java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+            java.util.List<models.Transaction> transactions = studentTransactions.getOrDefault(studentCode, new java.util.ArrayList<>());
+            transactions.add(0, new models.Transaction(today.format(fmt), "Nạp tiền", amount, "Thành công"));
+            studentTransactions.put(studentCode, transactions);
+            
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 
     public boolean payFine(String studentCode, long amount) {
-        CardInfo card = getCardByStudentCode(studentCode);
-        if (card == null || card.getBalance() < amount) return false;
-        card.setBalance(card.getBalance() - amount);
+        try {
+            long currentBalance = 0;
+            boolean usingCardBalance = false;
+            
+            if (isConnected && isPinVerified) {
+                long cardBalance = getBalanceFromCard();
+                // Nếu card balance hợp lệ (đã khởi tạo), dùng nó
+                if (cardBalance >= 0 && cardBalance <= 100_000_000_000L) {
+                    currentBalance = cardBalance;
+                    usingCardBalance = true;
+                } else {
+                    // Card balance chưa khởi tạo, fallback về memory
+                    CardInfo card = getCardByStudentCode(studentCode);
+                    if (card != null) currentBalance = card.getBalance();
+                }
+            } else {
+                CardInfo card = getCardByStudentCode(studentCode);
+                if (card != null) currentBalance = card.getBalance();
+            }
+            
+            if (currentBalance < amount) return false;
+            
+            long newBalance = currentBalance - amount;
 
-        java.time.LocalDate today = java.time.LocalDate.now();
-        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
-        java.util.List<models.Transaction> transactions = studentTransactions.getOrDefault(studentCode, new java.util.ArrayList<>());
-        transactions.add(0, new models.Transaction(today.format(fmt), "Thanh toán phạt", -amount, "Thành công"));
-        studentTransactions.put(studentCode, transactions);
-        return true;
+            // Ghi lại vào thẻ
+            if (isConnected && isPinVerified) {
+                updateBalanceOnCard(newBalance);
+            }
+            
+            // Update memory cache & Log transaction
+            CardInfo card = getCardByStudentCode(studentCode);
+            if (card != null) card.setBalance(newBalance);
+
+            java.time.LocalDate today = java.time.LocalDate.now();
+            java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+            java.util.List<models.Transaction> transactions = studentTransactions.getOrDefault(studentCode, new java.util.ArrayList<>());
+            transactions.add(0, new models.Transaction(today.format(fmt), "Thanh toán phạt", -amount, "Thành công"));
+            studentTransactions.put(studentCode, transactions);
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 
     public java.util.List<models.Transaction> getTransactions(String studentCode) {
@@ -370,6 +471,19 @@ public class SimulatorService {
     }
 
     public long getBalance(String studentCode) {
+        // Ưu tiên đọc từ thẻ
+        if (isConnected && isPinVerified) {
+            try {
+                long balance = getBalanceFromCard();
+                // Sync back to memory
+                CardInfo card = getCardByStudentCode(studentCode);
+                if (card != null) card.setBalance(balance);
+                return balance;
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        
         CardInfo card = getCardByStudentCode(studentCode);
         return card != null ? card.getBalance() : 0;
     }
@@ -379,7 +493,7 @@ public class SimulatorService {
     public void connect() throws Exception {
         simulator = new Simulator();
         AID aid = new AID(AppletConstants.APPLET_AID, (short)0, (byte)AppletConstants.APPLET_AID.length);
-        String appletClassName = "applet.LibraryCardApplet";
+        String appletClassName = "applet.LibraryCardApplet"; // [FIXED] Correct package and class name
         Class<?> appletClass = Class.forName(appletClassName);
         @SuppressWarnings("unchecked")
         Class<? extends javacard.framework.Applet> appletClassCasted =

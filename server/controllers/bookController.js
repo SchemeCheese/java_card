@@ -267,7 +267,7 @@ exports.returnBook = async (req, res) => {
         Math.ceil(diffTime / (1000 * 60 * 60 * 24))
       );
       borrowedBook.overdueDays = overdueDays;
-      borrowedBook.fine = overdueDays * 5000; // 5000 VND per day
+      borrowedBook.fine = overdueDays * 50; // 50 VND per day (reduced 100x)
     }
 
     borrowedBook.returnDate = now;
@@ -334,7 +334,7 @@ exports.getBorrowedBooksByStudent = async (req, res) => {
         book.status = 'Quá hạn';
         const diffTime = Math.abs(now - book.dueDate);
         book.overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        book.fine = book.overdueDays * 5000;
+        book.fine = book.overdueDays * 50; // 50 VND per day (reduced 100x)
         await book.save();
       }
     }

@@ -521,7 +521,7 @@ public class BorrowedBooksPage extends JPanel {
                                 count++;
                                 if (returned.getOverdueDays() > 0) {
                                     hasFine = true;
-                                    totalFine += returned.getOverdueDays() * 5000; // 5000 VND per day
+                                    totalFine += returned.getOverdueDays() * 50; // 50 VND per day
                                 }
                             }
                         } else {

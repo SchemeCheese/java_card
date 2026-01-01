@@ -13,6 +13,7 @@ public class LibraryCardApplet extends Applet {
     private BookManager bookManager;
     private RSAAuthenticationManager rsaAuthManager;
     private AESEncryptionManager aesEncryptionManager;
+    private byte[] encryptedBalance; // [NEW] 16 bytes for AES encrypted balance
 
     protected LibraryCardApplet() {
         // Constructor rỗng
@@ -26,6 +27,7 @@ public class LibraryCardApplet extends Applet {
         applet.bookManager = new BookManager();
         applet.rsaAuthManager = new RSAAuthenticationManager();
         applet.aesEncryptionManager = new AESEncryptionManager();
+        applet.encryptedBalance = new byte[16]; // [NEW] Initialize balance storage
 
         if (bLength == 0 || bArray == null || bOffset >= bArray.length) {
             applet.register();
@@ -153,8 +155,40 @@ public class LibraryCardApplet extends Applet {
                 aesEncryptionManager.decrypt(apdu);
                 break;
 
+            // [NEW] Balance Management (Simple inline implementation)
+            case AppletConstants.INS_GET_BALANCE:
+                getBalance(apdu);
+                break;
+            case AppletConstants.INS_UPDATE_BALANCE:
+                updateBalance(apdu);
+                break;
+
             default:
                 ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
         }
+    }
+
+    // [NEW] Get encrypted balance (16 bytes)
+    private void getBalance(APDU apdu) {
+        byte[] buffer = apdu.getBuffer();
+        Util.arrayCopy(encryptedBalance, (short)0, buffer, (short)0, (short)16);
+        apdu.setOutgoingAndSend((short)0, (short)16);
+    }
+
+    // [NEW] Update encrypted balance (requires PIN verification)
+    private void updateBalance(APDU apdu) {
+        if (!pinManager.isPinValidated()) {
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
+        }
+        
+        byte[] buffer = apdu.getBuffer();
+        short lc = (short)(buffer[ISO7816.OFFSET_LC] & 0xFF);
+        
+        if (lc != 16) {
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
+        
+        short bytesRead = apdu.setIncomingAndReceive();
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, encryptedBalance, (short)0, (short)16);
     }
 }

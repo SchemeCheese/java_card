@@ -88,38 +88,51 @@ public class FinancePage extends JPanel {
      * Load finance data từ API hoặc SimulatorService
      */
     private void loadFinanceData() {
-        if (apiManager.isServerAvailable()) {
+        // [UPDATED] Ưu tiên lấy số dư từ thẻ nếu đã kết nối và xác thực PIN
+        if (simulatorService.isConnected() && simulatorService.isPinVerified()) {
+            this.balance = simulatorService.getBalance(studentCode);
+        } else if (apiManager.isServerAvailable()) {
             try {
-                // Load balance từ API
+                // Load balance từ API (nếu chưa kết nối thẻ)
                 CardInfo card = cardApi.getCard(studentCode);
                 if (card != null) {
                     this.balance = card.getBalance();
                 }
-                
-                // Load transactions từ API
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        } else {
+            // Load từ SimulatorService (Mock/Offline)
+            this.balance = simulatorService.getBalance(studentCode);
+        }
+
+        // Load transactions (vẫn lấy từ API/Memory như cũ)
+        if (apiManager.isServerAvailable()) {
+            try {
                 List<Transaction> apiTransactions = transactionApi.getTransactionsByStudent(
                     studentCode, null, null, null, null, 1, 50
                 );
-                this.transactions = apiTransactions != null ? apiTransactions : new ArrayList<>();
-                
-                // Update UI
-                if (balanceValue != null) {
-                    balanceValue.setText(String.format("%,d VND", balance));
+                if (apiTransactions != null) {
+                    this.transactions = apiTransactions;
                 }
-                if (historyModel != null) {
-                    refreshHistoryTable();
-                }
-                return;
             } catch (Exception e) {
-                System.err.println("Error loading finance data from API: " + e.getMessage());
                 e.printStackTrace();
+                this.transactions = new ArrayList<>();
             }
+        } else {
+            this.transactions = simulatorService.getTransactions(studentCode);
         }
         
-        // Fallback về SimulatorService
-        this.balance = simulatorService.getBalance(studentCode);
-        this.transactions = new ArrayList<>(simulatorService.getTransactions(studentCode));
+        // [FIX] Update UI after loading data
+        if (balanceValue != null) {
+            NumberFormat fmt = NumberFormat.getInstance(new Locale("vi", "VN"));
+            balanceValue.setText(fmt.format(balance) + " VND");
+        }
+        if (historyModel != null) {
+            refreshHistoryTable();
+        }
     }
+
 
     /**
      * Load outstanding fines from API (server-backed).
@@ -300,7 +313,36 @@ public class FinancePage extends JPanel {
         
         JTextField amountField = createTextField("Nhập số tiền bạn muốn nạp");
         JButton topupBtn = createButton("Nạp Tiền", AppConstants.PRIMARY_COLOR, Color.WHITE, 110, 42);
-        topupBtn.addActionListener(e -> handleTopupFromField(amountField));
+        topupBtn.addActionListener(e -> {
+            // Mở VietQR payment dialog
+            String raw = amountField.getText().trim();
+            String digits = raw.replaceAll("[^0-9]", "");
+            if (digits.isEmpty()) {
+                JOptionPane.showMessageDialog(this, 
+                    "Vui lòng nhập số tiền hợp lệ!", 
+                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+            long value = Long.parseLong(digits);
+            if (value <= 0) {
+                JOptionPane.showMessageDialog(this,
+                    "Số tiền phải lớn hơn 0!",
+                    "Lỗi", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
+            // Open VietQR Payment Dialog
+            VietQRPaymentDialog dialog = new VietQRPaymentDialog(
+                (JFrame) SwingUtilities.getWindowAncestor(this),
+                simulatorService,
+                studentCode,
+                value
+            );
+            dialog.setVisible(true);
+            
+            // Refresh balance
+            loadFinanceData();
+        });
         
         inputRow.add(amountField, BorderLayout.CENTER);
         inputRow.add(topupBtn, BorderLayout.EAST);
@@ -333,13 +375,24 @@ public class FinancePage extends JPanel {
                 }
             });
             
-            // Nạp nhanh với số tiền cố định
+            // Nạp nhanh bằng VietQR
             btn.addActionListener(e -> {
                 amountField.setText(amt);
                 String digits = amt.replaceAll("[^0-9]", "");
                 if (!digits.isEmpty()) {
-                    long value = Long.parseLong(digits); // Không nhân 1000, vì "50,000" -> "50000" đã là giá trị đúng
-                    handleTopup(value);
+                    long value = Long.parseLong(digits);
+                    
+                    // Open VietQR Payment Dialog
+                    VietQRPaymentDialog dialog = new VietQRPaymentDialog(
+                        (JFrame) SwingUtilities.getWindowAncestor(this),
+                        simulatorService,
+                        studentCode,
+                        value
+                    );
+                    dialog.setVisible(true);
+                    
+                    // Refresh balance
+                    loadFinanceData();
                 }
             });
             
@@ -525,9 +578,34 @@ public class FinancePage extends JPanel {
             if (confirm != JOptionPane.YES_OPTION) return;
 
             try {
-                // Note: Server API hiện chỉ hỗ trợ thanh toán TẤT CẢ phạt cùng lúc
-                // TODO: Cần thêm API endpoint để thanh toán từng khoản riêng lẻ
+                // Check balance trước (ưu tiên từ card nếu có)
+                long currentBalance = 0;
+                
+                if (simulatorService.isConnected() && simulatorService.isPinVerified()) {
+                    currentBalance = simulatorService.getBalance(studentCode);
+                } else {
+                    // Fallback to memory/API
+                    models.CardInfo card = simulatorService.getCardByStudentCode(studentCode);
+                    if (card != null) {
+                        currentBalance = card.getBalance();
+                    }
+                }
+                
+                if (currentBalance < totalAmount) {
+                    JOptionPane.showMessageDialog(this,
+                        String.format("Số dư không đủ để thanh toán tiền phạt.\nSố dư: %,d VND\nCần thanh toán: %,d VND",
+                            currentBalance, totalAmount),
+                        "Lỗi", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                
+                
                 FinePaymentResult result = bookApi.payOutstandingFines(studentCode);
+                
+                // [NEW] Trừ tiền trên thẻ nếu có kết nối
+                if (simulatorService.isConnected() && simulatorService.isPinVerified()) {
+                    simulatorService.payFine(studentCode, totalAmount);
+                }
 
                 // Refresh balance + transactions
                 loadFinanceData();
