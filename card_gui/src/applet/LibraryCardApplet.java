@@ -144,6 +144,18 @@ public class LibraryCardApplet extends Applet {
                     ISOException.throwIt((short)0x6A1A); // Exception in router
                 }
                 break;
+            case AppletConstants.INS_RSA_DECRYPT: // [NEW] Decrypt Server Key
+                 // Check if rsaAuthManager is initialized
+                if (rsaAuthManager == null) {
+                    ISOException.throwIt((short)0x6A1B);
+                    break;
+                }
+                try {
+                    rsaAuthManager.decrypt(apdu);
+                } catch (Exception e) {
+                    ISOException.throwIt(ISO7816.SW_UNKNOWN);
+                }
+                break;
             // AES Encryption
             case AppletConstants.INS_AES_SET_KEY:
                 aesEncryptionManager.setAESKey(apdu, pinManager);

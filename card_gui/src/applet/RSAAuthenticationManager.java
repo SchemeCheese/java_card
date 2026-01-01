@@ -375,6 +375,43 @@ public class RSAAuthenticationManager {
             return;
         }
     }
+
+    /**
+     * Decrypt data using Private Key (for Master Key delivery)
+     * Input: [ENCRYPTED_DATA (128 bytes for 1024-bit key)]
+     * Output: [DECRYPTED_DATA (Variable length)]
+     */
+    public void decrypt(APDU apdu) {
+        if (!keyPairGenerated || privateKey == null) {
+            ISOException.throwIt((short)0x6A00); // Keypair not generated
+        }
+
+        byte[] buffer = apdu.getBuffer();
+        short len = apdu.setIncomingAndReceive();
+        
+        // Input length validation (should match modulus size)
+        if (len != AppletConstants.RSA_MODULUS_SIZE) {
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
+        
+        try {
+            // Use RSA PKCS#1 padding for compatibility with standard crypto libraries (e.g., Node.js, Java)
+            Cipher cipher = Cipher.getInstance(Cipher.ALG_RSA_PKCS1, false);
+            cipher.init(privateKey, Cipher.MODE_DECRYPT);
+            
+            // Decrypt directly in buffer
+            // Input: buffer[OFFSET_CDATA] (128 bytes)
+            // Output: buffer[0] (variable bytes)
+            short decryptedLen = cipher.doFinal(buffer, ISO7816.OFFSET_CDATA, len, buffer, (short)0);
+            
+            apdu.setOutgoingAndSend((short)0, decryptedLen);
+            
+        } catch (CryptoException e) {
+             ISOException.throwIt((short)0x6A13); // Decrypt failed
+        } catch (Exception e) {
+             ISOException.throwIt(ISO7816.SW_UNKNOWN);
+        }
+    }
     
     /**
      * Kiểm tra đã tạo khóa chưa

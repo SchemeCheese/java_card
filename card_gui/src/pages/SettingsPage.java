@@ -310,118 +310,56 @@ public class SettingsPage extends JPanel {
         }
         
         try {
-            // Create CardInfo object
-            CardInfo cardInfo = new CardInfo(studentId, name, email, department, birthDate, address);
-            
             // Save to JavaCard (if connected and PIN verified)
             if (simulatorService != null && simulatorService.isConnected() && simulatorService.isPinVerified()) {
-                // Step 1: Generate RSA keypair on card
-                byte[] publicKeyData = null;
-                String publicKeyPEM = null;
-                try {
-                    publicKeyData = simulatorService.generateRSAKeyPair();
-                    if (publicKeyData != null) {
-                        // Extract modulus and exponent
-                        byte[] modulus = new byte[applet.AppletConstants.RSA_MODULUS_SIZE];
-                        byte[] exponent = new byte[3];
-                        System.arraycopy(publicKeyData, 0, modulus, 0, modulus.length);
-                        System.arraycopy(publicKeyData, modulus.length, exponent, 0, exponent.length);
-                        
-                        // Convert to PEM format
-                        publicKeyPEM = RSAUtility.convertToPEM(modulus, exponent);
-                        addActivityLog("Tạo RSA keypair", studentId, "Thành công");
-                    }
-                } catch (Exception rsaEx) {
-                    addActivityLog("Tạo RSA keypair", studentId, "Thất bại: " + rsaEx.getMessage());
-                    // Continue anyway - RSA is optional
-                }
                 
-                // Step 2: Save card info to server (with RSA public key if available)
+                // Step 1: Create card on server first
                 if (apiManager != null && apiManager.isServerAvailable()) {
                     try {
-                        // Create card on server with full information
                         cardApi.createCard(studentId, name, email, department, birthDate, address);
-                        
-                        // Update RSA public key if available
-                        if (publicKeyPEM != null) {
-                            try {
-                                cardApi.updateRSAPublicKey(studentId, publicKeyPEM);
-                                // Also save to CardInfo for later use
-                                cardInfo.setRsaPublicKey(publicKeyPEM);
-                                addActivityLog("Lưu RSA public key", studentId, "Thành công");
-                            } catch (Exception e) {
-                                addActivityLog("Lưu RSA public key", studentId, "Thất bại: " + e.getMessage());
-                            }
-                        }
-                        
                         addActivityLog("Lưu thẻ lên server", studentId, "Thành công");
                     } catch (Exception apiEx) {
                         addActivityLog("Lưu thẻ lên server", studentId, "Thất bại: " + apiEx.getMessage());
-                        // Continue - save to card anyway
+                        int confirm = JOptionPane.showConfirmDialog(this,
+                            "Không thể lưu lên server: " + apiEx.getMessage() + "\nBạn có muốn tiếp tục lưu vào thẻ không?",
+                            "Lỗi Server", JOptionPane.YES_NO_OPTION);
+                        if (confirm != JOptionPane.YES_OPTION) {
+                            return;
+                        }
                     }
                 }
+
+                // Step 2: Save info to Card
+                // Note: RSA Key & AES Key will be generated upon FIRST LOGIN by the student
+                // Here we just save the personal info.
+                CardInfo cardInfo = new CardInfo(studentId, name, email, department, birthDate, address);
                 
-                // Step 3: Save card info to card with AES encryption
                 boolean saved = simulatorService.setCardInfo(cardInfo);
                 if (saved) {
-                    // Also add to in-memory list for display
+                    // Update in-memory list
                     simulatorService.addCardToList(cardInfo);
-                    addActivityLog("Lưu thông tin thẻ (AES)", studentId, "Thành công");
+                    addActivityLog("Lưu thông tin thẻ", studentId, "Thành công");
                     
                     JOptionPane.showMessageDialog(this,
                         "Đã tạo thẻ thành công!\n" +
                         "MSSV: " + studentId + "\n" +
-                        "Họ tên: " + name + "\n" +
-                        (publicKeyPEM != null ? "✓ RSA keypair đã tạo\n" : "") +
-                        "✓ Thông tin đã được mã hóa AES",
+                        "Họ tên: " + name,
                         "Thành công", JOptionPane.INFORMATION_MESSAGE);
                     
                     clearForm();
-                    // Reset to page 1 and refresh from server to show new card
                     currentPage = 1;
                     refreshCardList();
                 } else {
                     addActivityLog("Lưu thông tin thẻ", studentId, "Thất bại");
                     JOptionPane.showMessageDialog(this,
-                        "Không thể lưu thông tin thẻ!",
+                        "Không thể lưu thông tin vào thẻ!",
                         "Lỗi", JOptionPane.ERROR_MESSAGE);
                 }
             } else {
-                // Save to server first (if available)
-                boolean serverSaved = false;
-                if (apiManager != null && apiManager.isServerAvailable()) {
-                    try {
-                        // Create card on server with full information
-                        cardApi.createCard(studentId, name, email, department, birthDate, address);
-                        addActivityLog("Lưu thẻ lên server", studentId, "Thành công");
-                        serverSaved = true;
-                    } catch (Exception apiEx) {
-                        addActivityLog("Lưu thẻ lên server", studentId, "Thất bại: " + apiEx.getMessage());
-                        JOptionPane.showMessageDialog(this,
-                            "Không thể lưu thẻ lên server: " + apiEx.getMessage() + "\n" +
-                            "Thẻ sẽ chỉ được lưu ở chế độ demo (in-memory).",
-                            "Cảnh báo", JOptionPane.WARNING_MESSAGE);
-                    }
-                }
-                
-                // Save to in-memory only (demo mode)
-                if (simulatorService != null) {
-                    simulatorService.addCardToList(cardInfo);
-                }
-                addActivityLog("Tạo thẻ mới", studentId, serverSaved ? "Thành công (đã lưu server)" : "Thành công (demo)");
-                
-                JOptionPane.showMessageDialog(this,
-                    (serverSaved ? "Đã tạo thẻ mới và lưu vào database!\n" : "Đã tạo thẻ mới (chế độ demo)!\n") +
-                    "MSSV: " + studentId + "\n" +
-                    "Họ tên: " + name + "\n" +
-                    (serverSaved ? "✓ Đã lưu vào database\n" : "⚠ Chưa lưu vào database\n") +
-                    "Lưu ý: Để lưu vào thẻ thật, vui lòng xác thực PIN trước.",
-                    "Thành công", JOptionPane.INFORMATION_MESSAGE);
-                
-                clearForm();
-                // Reset to page 1 and refresh from server to show new card
-                currentPage = 1;
-                refreshCardList();
+                // Not connected or PIN not verified
+                 JOptionPane.showMessageDialog(this,
+                    "Vui lòng kết nối thẻ và xác thực PIN trước khi tạo thẻ mới!",
+                    "Yêu cầu kết nối", JOptionPane.WARNING_MESSAGE);
             }
         } catch (Exception ex) {
             addActivityLog("Tạo thẻ mới", studentId, "Thất bại: " + ex.getMessage());
@@ -431,7 +369,6 @@ public class SettingsPage extends JPanel {
             ex.printStackTrace();
         }
     }
-    
     private String getFieldValue(JTextField field, String placeholder) {
         String value = field.getText().trim();
         if (value.equals(placeholder)) {

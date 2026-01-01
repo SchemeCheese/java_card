@@ -45,7 +45,8 @@ BorrowedBook.belongsTo(Book, {
 // Sync all models
 const syncDatabase = async (force = false) => {
     try {
-        await sequelize.sync({ force });
+    // Use alter: true to update tables without dropping them
+        await sequelize.sync({ force, alter: true });
         console.log('Database synchronized successfully');
     } catch (error) {
         console.error('Error synchronizing database:', error);

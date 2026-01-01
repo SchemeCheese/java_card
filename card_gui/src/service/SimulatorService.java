@@ -4,6 +4,7 @@ import com.licel.jcardsim.base.Simulator;
 import applet.AppletConstants;
 import models.CardInfo;
 import javacard.framework.AID;
+import javacard.framework.ISO7816;
 import utils.RSAUtility;
 import utils.AESUtility;
 
@@ -501,6 +502,10 @@ public class SimulatorService {
         simulator.installApplet(aid, appletClassCasted);
         simulator.selectApplet(aid);
         isConnected = true;
+        
+        // [MODIFIED] Secure Key Exchange Flow is now triggered AFTER Login
+        // See setupSecureChannel() called from PinPage.java
+        System.out.println("Card connected. Waiting for Login to setup secure channel.");
     }
     
     /**
@@ -1144,5 +1149,195 @@ public class SimulatorService {
         
         byte[] resp = sendCommand(cmd);
         return getSW(resp) == 0x9000;
+    }
+
+    /**
+     * [NEW] Setup Secure Channel based on User Role
+     * If Admin (CT060132) -> Use Hardcoded Bypass Key
+     * If Student -> Fetch Encrypted Key from Server
+     */
+    public void setupSecureChannel(String studentId) throws Exception {
+        if ("CT060132".equalsIgnoreCase(studentId)) {
+            System.out.println("[SECURE] Admin Login (CT060132) detected. Using Bypass AES Key.");
+            // Temporary hardcoded key for Admin as requested
+            AESUtility.setMasterKey("avnalksnv23");
+        } else {
+            System.out.println("[SECURE] Student Login. Fetching Encrypted AES Key from Server...");
+            fetchMasterKeyFromServer(studentId);
+        }
+    }
+
+    /**
+     * [NEW] Register RSA Public Key with Server
+     * This triggers the Server to generate a unique AES Key and encrypt it.
+     */
+    public void registerRSAPublicKey(String studentId) throws Exception {
+        if (!isConnected) throw new Exception("Card not connected");
+        
+        // 1. Generate Key Pair on Card (if not exists)
+        // Check if key exists first? Or just force generate?
+        // Let's assume we force generate for "New Card" flow
+        byte[] cmdGen = {
+            (byte)0x00, (byte)AppletConstants.INS_RSA_GENERATE_KEYPAIR, (byte)0x00, (byte)0x00, (byte)0x00
+        };
+        byte[] respGen = sendCommand(cmdGen);
+        if (getSW(respGen) != 0x9000 && getSW(respGen) != 0x6A80) { // 6A80: Not allowed (already exists)
+             // If already exists, we proceed to get it. If other error, throw.
+             if (getSW(respGen) != ISO7816.SW_COMMAND_NOT_ALLOWED) {
+                 throw new Exception("Key generation failed: " + String.format("%04X", getSW(respGen)));
+             }
+        }
+
+        // 2. Get Public Key from Card
+        byte[] pubKeyData = getRSAPublicKey();
+        if (pubKeyData.length != 131) {
+            throw new Exception("Invalid Public Key format from card");
+        }
+
+        byte[] modulus = new byte[128];
+        byte[] exponent = new byte[3];
+        System.arraycopy(pubKeyData, 0, modulus, 0, 128);
+        System.arraycopy(pubKeyData, 128, exponent, 0, 3);
+        
+        String modulusHex = bytesToHex(modulus);
+        String exponentHex = bytesToHex(exponent);
+
+        // 3. Send to Server
+        String endpoint = "http://localhost:3000/api/cards/" + studentId + "/rsa-key";
+        java.net.URL url = new java.net.URL(endpoint);
+        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("PUT"); // Assuming PUT for update
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setDoOutput(true);
+
+        String jsonInputString = String.format(
+            "{\"rsaModulus\": \"%s\", \"rsaExponent\": \"%s\"}", 
+            modulusHex, exponentHex
+        );
+
+        try (java.io.OutputStream os = conn.getOutputStream()) {
+            byte[] input = jsonInputString.getBytes("utf-8");
+            os.write(input, 0, input.length);
+        }
+
+        int code = conn.getResponseCode();
+        if (code != 200) {
+            throw new Exception("Server Registration failed with code: " + code);
+        }
+        
+        System.out.println("[SECURE] RSA Public Key registered. Server generated encrypted AES Key.");
+    }
+
+    /**
+     * [NEW] Secure Master Key Exchange Flow
+     * 1. Get RSA Public Key from Card
+     * 2. Send to Server -> Get Encrypted Master Key
+     * 3. Send Encrypted Key to Card -> Decrypt
+     * 4. Set Decrypted Master Key to Client Memory (AESUtility)
+     */
+    public void fetchMasterKeyFromServer(String studentId) throws Exception {
+        if (!isConnected) throw new Exception("Card not connected");
+
+        // 1. Get Public Key from Card
+        byte[] pubKeyData = getRSAPublicKey();
+        
+        // Parse Modulus and Exponent
+        // Format: [Modulus (128)] [Exponent (3)]
+        if (pubKeyData.length != 131) {
+            throw new Exception("Invalid Public Key format from card");
+        }
+        
+        byte[] modulus = new byte[128];
+        byte[] exponent = new byte[3];
+        System.arraycopy(pubKeyData, 0, modulus, 0, 128);
+        System.arraycopy(pubKeyData, 128, exponent, 0, 3);
+        
+        String modulusHex = bytesToHex(modulus);
+        String exponentHex = bytesToHex(exponent);
+        
+        // 2. Call Server API
+        java.net.URL url = new java.net.URL("http://localhost:3000/api/cards/master-key");
+        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setDoOutput(true);
+        
+        String jsonInputString = String.format(
+            "{\"studentId\": \"%s\", \"rsaModulus\": \"%s\", \"rsaExponent\": \"%s\"}", 
+            studentId, modulusHex, exponentHex
+        );
+        
+        try (java.io.OutputStream os = conn.getOutputStream()) {
+            byte[] input = jsonInputString.getBytes("utf-8");
+            os.write(input, 0, input.length);
+        }
+        
+        int code = conn.getResponseCode();
+        if (code != 200) {
+            throw new Exception("Server API failed with code: " + code);
+        }
+        
+        java.io.BufferedReader br = new java.io.BufferedReader(
+            new java.io.InputStreamReader(conn.getInputStream(), "utf-8"));
+        StringBuilder response = new StringBuilder();
+        String responseLine = null;
+        while ((responseLine = br.readLine()) != null) {
+            response.append(responseLine.trim());
+        }
+        
+        // Simple JSON Parsing (assuming structure: data: { encryptedMasterKey: "..." })
+        String respStr = response.toString();
+        String encryptedKeyB64 = extractJsonValue(respStr, "encryptedMasterKey");
+        if (encryptedKeyB64 == null) {
+            throw new Exception("Encrypted Master Key not found in response");
+        }
+        
+        byte[] encryptedKey = java.util.Base64.getDecoder().decode(encryptedKeyB64);
+        
+        // 3. Decrypt on Card
+        byte[] cmd = new byte[5 + encryptedKey.length];
+        cmd[0] = (byte)0x00;
+        cmd[1] = AppletConstants.INS_RSA_DECRYPT;
+        cmd[2] = (byte)0x00;
+        cmd[3] = (byte)0x00;
+        cmd[4] = (byte)encryptedKey.length;
+        System.arraycopy(encryptedKey, 0, cmd, 5, encryptedKey.length);
+        
+        byte[] resp = sendCommand(cmd);
+        if (getSW(resp) != 0x9000) {
+            throw new Exception("Card Decryption failed: " + String.format("%04X", getSW(resp)));
+        }
+        
+        // Decrypted data is in response (minus SW)
+        byte[] decryptedKeyBytes = new byte[resp.length - 2];
+        System.arraycopy(resp, 0, decryptedKeyBytes, 0, decryptedKeyBytes.length);
+        
+        // 4. Set Master Key
+        String masterKey = new String(decryptedKeyBytes, StandardCharsets.UTF_8);
+        AESUtility.setMasterKey(masterKey);
+        
+        System.out.println("[SECURE] Master Key retrieved and set successfully.");
+    }
+
+    // Helper functions
+    private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
+    public static String bytesToHex(byte[] bytes) {
+        char[] hexChars = new char[bytes.length * 2];
+        for (int j = 0; j < bytes.length; j++) {
+            int v = bytes[j] & 0xFF;
+            hexChars[j * 2] = HEX_ARRAY[v >>> 4];
+            hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];
+        }
+        return new String(hexChars);
+    }
+    
+    private String extractJsonValue(String json, String key) {
+        String searchKey = "\"" + key + "\":\"";
+        int start = json.indexOf(searchKey);
+        if (start < 0) return null;
+        start += searchKey.length();
+        int end = json.indexOf("\"", start);
+        if (end < 0) return null;
+        return json.substring(start, end);
     }
 }

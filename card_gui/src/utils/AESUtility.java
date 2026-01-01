@@ -13,23 +13,62 @@ import java.util.Arrays;
  */
 public class AESUtility {
 
-    // Hardcoded Key for Demo (16 bytes)
-    // In production, this should be derived or stored securely
-    private static final byte[] AES_KEY = {
-        (byte)0x50, (byte)0x61, (byte)0x73, (byte)0x73, // 'P','a','s','s'
-        (byte)0x77, (byte)0x6F, (byte)0x72, (byte)0x64, // 'w','o','r','d'
-        (byte)0x31, (byte)0x32, (byte)0x33, (byte)0x34, // '1','2','3','4'
-        (byte)0x41, (byte)0x42, (byte)0x43, (byte)0x44  // 'A','B','C','D'
-    };
+    // Key is no longer hardcoded. It is injected at runtime after secure exchange.
+    private static byte[] aesKey;
+    private static String systemMasterKey; // Plaintext System Master Key (RAM only)
 
     private static final String ALGORITHM = "AES/ECB/NoPadding";
-    private static final String MASTER_KEY = "MASTER_KEY_FOR_LIBRARY_CARD_SYSTEM"; // Demo Master Key
 
     /**
-     * Get Master Key
+     * Set Master Key (called after secure exchange with Server & Card)
+     * @param masterKey Plaintext Master Key acquired from secure channel
+     */
+    public static void setMasterKey(String masterKey) {
+        if (masterKey == null || masterKey.isEmpty()) {
+            throw new IllegalArgumentException("Master Key cannot be empty");
+        }
+        systemMasterKey = masterKey;
+        
+        // For 'encryptBalance' legacy support (which used a fixed key derived from "Password..."):
+        // We will now use the first 16 bytes of Master Key directly or derive a default key.
+        // Assuming Master Key from server is the root key. 
+        // Let's use it directly as the AES Key for balance encryption for now (as requested).
+        // Or better: Derive a default 'session key' from it to match previous 'AES_KEY' usage pattern
+        try {
+            // Demo strategy: Use Master Key bytes directly (padded/truncated to 16 bytes)
+            byte[] keyBytes = masterKey.getBytes("UTF-8");
+            aesKey = new byte[16];
+            System.arraycopy(keyBytes, 0, aesKey, 0, Math.min(keyBytes.length, 16));
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Get Master Key (for Key Derivation)
      */
     public static String getMasterKey() {
-        return MASTER_KEY;
+        if (systemMasterKey == null) {
+            throw new IllegalStateException("System Master Key not initialized. Connect and authenticate with server first.");
+        }
+        return systemMasterKey;
+    }
+    
+    /**
+     * Check if key is initialized
+     */
+    public static boolean isKeyInitialized() {
+        return aesKey != null && systemMasterKey != null;
+    }
+
+    /**
+     * Helper to get current AES Key (internal)
+     */
+    private static byte[] getAESKey() {
+        if (aesKey == null) {
+            throw new IllegalStateException("AES Key not initialized. Connect to card and authenticate first.");
+        }
+        return aesKey;
     }
 
     /**
@@ -86,7 +125,7 @@ public class AESUtility {
         }
         byte[] input = buffer.array();
 
-        SecretKeySpec keySpec = new SecretKeySpec(AES_KEY, "AES");
+        SecretKeySpec keySpec = new SecretKeySpec(getAESKey(), "AES");
         Cipher cipher = Cipher.getInstance(ALGORITHM);
         cipher.init(Cipher.ENCRYPT_MODE, keySpec);
 
@@ -101,7 +140,7 @@ public class AESUtility {
             throw new IllegalArgumentException("Invalid encrypted data length");
         }
 
-        SecretKeySpec keySpec = new SecretKeySpec(AES_KEY, "AES");
+        SecretKeySpec keySpec = new SecretKeySpec(getAESKey(), "AES");
         Cipher cipher = Cipher.getInstance(ALGORITHM);
         cipher.init(Cipher.DECRYPT_MODE, keySpec);
 

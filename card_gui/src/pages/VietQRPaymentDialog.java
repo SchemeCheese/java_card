@@ -316,7 +316,7 @@ public class VietQRPaymentDialog extends JDialog {
                     boolean depositSuccess = simulatorService.deposit(cardId, amount);
                     
                     if (depositSuccess) {
-                        updateInfoRow(statusPanel, "✓ Thanh toán thành công!");
+                        updateInfoRow(statusPanel, "Thanh toán thành công!");
                         closeButton.setText("Hoàn tất");
                         closeButton.setBackground(AppConstants.SUCCESS_COLOR);
                         
@@ -324,7 +324,7 @@ public class VietQRPaymentDialog extends JDialog {
                             "Thanh toán thành công!\nSố dư đã được cập nhật vào thẻ.",
                             "Thành công", JOptionPane.INFORMATION_MESSAGE);
                     } else {
-                        updateInfoRow(statusPanel, "⚠️ Lỗi cập nhật thẻ");
+                        updateInfoRow(statusPanel, "Lỗi cập nhật thẻ");
                         closeButton.setBackground(AppConstants.WARNING_COLOR);
                         
                         JOptionPane.showMessageDialog(VietQRPaymentDialog.this,
@@ -337,7 +337,7 @@ public class VietQRPaymentDialog extends JDialog {
                     paymentCompleted = true;
                     sseClient.disconnect();
                     progressBar.setIndeterminate(false);
-                    updateInfoRow(statusPanel, "✗ Thanh toán thất bại");
+                    updateInfoRow(statusPanel, "Thanh toán thất bại");
                     closeButton.setBackground(AppConstants.DANGER_COLOR);
                     break;
                     
@@ -345,13 +345,13 @@ public class VietQRPaymentDialog extends JDialog {
                     paymentCompleted = true;
                     sseClient.disconnect();
                     progressBar.setIndeterminate(false);
-                    updateInfoRow(statusPanel, "✗ Đã hết hạn");
+                    updateInfoRow(statusPanel, "Đã hết hạn");
                     closeButton.setBackground(AppConstants.DANGER_COLOR);
                     break;
                     
                 case "PENDING":
                 default:
-                    updateInfoRow(statusPanel, "⏳ Chờ thanh toán...");
+                    updateInfoRow(statusPanel, "Chờ thanh toán...");
                     break;
             }
             
@@ -369,7 +369,7 @@ public class VietQRPaymentDialog extends JDialog {
         
         if (!paymentCompleted) {
             SwingUtilities.invokeLater(() -> {
-                updateInfoRow(statusPanel, "⚠️ Mất kết nối");
+                updateInfoRow(statusPanel, "Mất kết nối");
                 
                 // Có thể fallback về polling ở đây nếu cần
                 // hoặc thử reconnect

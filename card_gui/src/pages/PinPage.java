@@ -545,40 +545,41 @@ public class PinPage extends JPanel {
                             // No RSA keypair yet - auto-generate on first login
                             try {
                                 System.out.println("RSA keypair not found - generating on first login for: " + studentCode);
-                                byte[] publicKeyData = simulatorService.generateRSAKeyPair();
-                                if (publicKeyData != null) {
-                                    // Extract modulus and exponent
-                                    byte[] modulus = new byte[applet.AppletConstants.RSA_MODULUS_SIZE];
-                                    byte[] exponent = new byte[3];
-                                    System.arraycopy(publicKeyData, 0, modulus, 0, modulus.length);
-                                    System.arraycopy(publicKeyData, modulus.length, exponent, 0, exponent.length);
-                                    
-                                    // Convert to PEM format
-                                    String publicKeyPEM = utils.RSAUtility.convertToPEM(modulus, exponent);
-                                    
-                                    // Save to server if available
-                                    if (apiManager != null && apiManager.isServerAvailable()) {
-                                        try {
-                                            cardApi.updateRSAPublicKey(studentCode, publicKeyPEM);
-                                            System.out.println("RSA public key saved to server");
-                                        } catch (Exception apiEx) {
-                                            System.out.println("Could not save RSA key to server: " + apiEx.getMessage());
+                                
+                                // Use registerRSAPublicKey which handles: Generate + Get + Send to Server
+                                if (apiManager != null && apiManager.isServerAvailable()) {
+                                    try {
+                                        simulatorService.registerRSAPublicKey(studentCode);
+                                        System.out.println("RSA public key registered with server via SimulatorService");
+                                        
+                                        // Get the key that was just generated to save in CardInfo
+                                        byte[] publicKeyData = simulatorService.getRSAPublicKey();
+                                        if (publicKeyData != null && publicKeyData.length == 131) {
+                                            byte[] modulus = new byte[applet.AppletConstants.RSA_MODULUS_SIZE];
+                                            byte[] exponent = new byte[3];
+                                            System.arraycopy(publicKeyData, 0, modulus, 0, modulus.length);
+                                            System.arraycopy(publicKeyData, modulus.length, exponent, 0, exponent.length);
+                                            
+                                            String publicKeyPEM = utils.RSAUtility.convertToPEM(modulus, exponent);
+                                            
+                                            // Save to CardInfo for later use
+                                            models.CardInfo cardInfo = simulatorService.getCardByStudentCode(studentCode);
+                                            if (cardInfo != null) {
+                                                cardInfo.setRsaPublicKey(publicKeyPEM);
+                                            }
                                         }
+                                        
+                                        rsaKeyJustGenerated = true;
+                                    } catch (Exception apiEx) {
+                                        System.out.println("Could not register RSA key with server: " + apiEx.getMessage());
+                                        apiEx.printStackTrace();
                                     }
-                                    
-                                    // Save to CardInfo for later use
-                                    models.CardInfo cardInfo = simulatorService.getCardByStudentCode(studentCode);
-                                    if (cardInfo != null) {
-                                        cardInfo.setRsaPublicKey(publicKeyPEM);
-                                    }
-                                    
-                                    System.out.println("RSA keypair generated successfully on first login");
-                                    rsaKeyJustGenerated = true; // Mark that we just generated
-                                    // Skip authentication for first login - will authenticate on next login
+                                } else {
+                                    System.out.println("Server not available - cannot register RSA key");
                                 }
                             } catch (Exception genEx) {
                                 System.out.println("Could not generate RSA keypair: " + genEx.getMessage());
-                                // Continue - RSA is optional
+                                genEx.printStackTrace();
                             }
                         }
                         
@@ -656,6 +657,15 @@ public class PinPage extends JPanel {
                     setForceChangePinState();
                 } else {
                     setVerifiedState();
+                    // [NEW] Setup Secure Channel after successful login
+                    try {
+                        simulatorService.setupSecureChannel(studentCode);
+                    } catch (Exception secureEx) {
+                        System.err.println("Failed to setup secure channel: " + secureEx.getMessage());
+                        // Optional: Show warning but allow login?
+                        // JOptionPane.showMessageDialog(this, "Không thể thiết lập kênh bảo mật: " + secureEx.getMessage(), "Cảnh báo", JOptionPane.WARNING_MESSAGE);
+                    }
+
                     JOptionPane.showMessageDialog(this, "Đăng nhập thành công!", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
                 }
             } else {
@@ -728,6 +738,13 @@ public class PinPage extends JPanel {
                     }
                     
                     setVerifiedState();
+                    // [NEW] Setup Secure Channel for Admin
+                    try {
+                        simulatorService.setupSecureChannel(studentCode);
+                    } catch (Exception secureEx) {
+                        System.err.println("Failed to setup secure channel for Admin: " + secureEx.getMessage());
+                    }
+
                     JOptionPane.showMessageDialog(this, "Đăng nhập Admin thành công!", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
                 } else {
                     int tries = simulatorService.getPinTriesRemaining();

@@ -367,22 +367,33 @@ exports.updateRSAPublicKey = async (req, res) => {
         const { studentId } = req.params;
         const { rsaPublicKey, rsaModulus, rsaExponent } = req.body;
 
+        console.log('[DEBUG] updateRSAPublicKey called for studentId:', studentId);
+        console.log('[DEBUG] Request body keys:', Object.keys(req.body));
+        console.log('[DEBUG] rsaModulus length:', rsaModulus ? rsaModulus.length : 'null');
+        console.log('[DEBUG] rsaExponent length:', rsaExponent ? rsaExponent.length : 'null');
+
         const card = await Card.findOne({ where: { studentId } });
         
         if (!card) {
+            console.log('[DEBUG] Card not found for studentId:', studentId);
             return res.status(404).json({
                 success: false,
                 message: 'Không tìm thấy thẻ'
             });
         }
 
+        console.log('[DEBUG] Card found:', card.studentId, card.holderName);
+
         // Convert RSA key if provided in JavaCard format
         let rsaPublicKeyPEM = rsaPublicKey;
         if (rsaModulus && rsaExponent && !rsaPublicKey) {
+            console.log('[DEBUG] Converting RSA key from modulus/exponent to PEM...');
             rsaPublicKeyPEM = convertRSAPublicKeyToPEM(rsaModulus, rsaExponent);
+            console.log('[DEBUG] PEM conversion result:', rsaPublicKeyPEM ? 'SUCCESS' : 'FAILED');
         }
 
         if (!rsaPublicKeyPEM) {
+            console.log('[DEBUG] No valid RSA public key provided');
             return res.status(400).json({
                 success: false,
                 message: 'Không thể chuyển đổi khóa RSA'
@@ -391,18 +402,43 @@ exports.updateRSAPublicKey = async (req, res) => {
 
         card.rsaPublicKey = rsaPublicKeyPEM;
         card.rsaKeyCreatedAt = new Date();
+        console.log('[DEBUG] RSA public key set, length:', rsaPublicKeyPEM.length);
+
+        // [NEW] Generate Random AES Key for this Card (16 bytes)
+        const randomAesKey = crypto.randomBytes(16);
+        console.log('[DEBUG] Generated random AES key (16 bytes)');
+        
+        // Encrypt AES Key with Card's Public Key
+        // Sử dụng PKCS#1 padding để tương thích với Java/JCard
+        console.log('[DEBUG] Encrypting AES key with RSA public key...');
+        const encryptedAesKeyBuffer = crypto.publicEncrypt(
+            {
+                key: rsaPublicKeyPEM,
+                padding: crypto.constants.RSA_PKCS1_PADDING,
+            },
+            randomAesKey
+        );
+        console.log('[DEBUG] AES key encrypted, length:', encryptedAesKeyBuffer.length);
+        
+        // Store Encrypted AES Key
+        card.encryptedAesKey = encryptedAesKeyBuffer.toString('base64');
+        console.log('[DEBUG] Encrypted AES key (base64) length:', card.encryptedAesKey.length);
+        
         await card.save();
+        console.log('[DEBUG] Card saved successfully with RSA and encrypted AES keys');
 
         res.json({
             success: true,
-            message: 'Cập nhật khóa RSA thành công',
+            message: 'Cập nhật khóa RSA và tạo AES Key thành công',
             data: {
                 studentId: card.studentId,
-                hasRSAKey: true
+                hasRSAKey: true,
+                hasEncryptedAesKey: true
             }
         });
     } catch (error) {
-        console.error('Update RSA key error:', error);
+        console.error('[ERROR] Update RSA key error:', error);
+        console.error('[ERROR] Stack trace:', error.stack);
         res.status(500).json({
             success: false,
             message: 'Lỗi khi cập nhật khóa RSA',
@@ -448,6 +484,79 @@ exports.getRSAPublicKey = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Lỗi khi lấy khóa RSA',
+            error: error.message
+        });
+    }
+};
+
+// Get Encrypted Master Key (Server -> Client -> Card)
+exports.getEncryptedMasterKey = async (req, res) => {
+    try {
+        const { studentId, rsaPublicKey, rsaModulus, rsaExponent } = req.body;
+
+        console.log('[DEBUG] getEncryptedMasterKey called');
+        console.log('[DEBUG] studentId:', studentId);
+        console.log('[DEBUG] Request body keys:', Object.keys(req.body));
+        console.log('[DEBUG] rsaModulus length:', rsaModulus ? rsaModulus.length : 'null');
+        console.log('[DEBUG] rsaExponent length:', rsaExponent ? rsaExponent.length : 'null');
+
+        // Convert RSA key if provided in JavaCard format
+        let rsaPublicKeyPEM = rsaPublicKey;
+        if (rsaModulus && rsaExponent && !rsaPublicKey) {
+            console.log('[DEBUG] Converting RSA key from modulus/exponent to PEM...');
+            rsaPublicKeyPEM = convertRSAPublicKeyToPEM(rsaModulus, rsaExponent);
+            console.log('[DEBUG] PEM conversion result:', rsaPublicKeyPEM ? 'SUCCESS' : 'FAILED');
+        }
+
+        // Lookup Card
+        let card = null;
+        if (studentId) {
+             // Best way: Lookup by ID
+             console.log('[DEBUG] Looking up card by studentId:', studentId);
+             card = await Card.findOne({ where: { studentId } });
+        } else if (rsaPublicKeyPEM) {
+             // Fallback: Lookup by Key (Fragile due to formatting)
+             console.log('[DEBUG] Looking up card by RSA public key (fallback method)');
+             card = await Card.findOne({ where: { rsaPublicKey: rsaPublicKeyPEM } });
+        }
+
+        if (!card) {
+            console.log('[DEBUG] Card not found');
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy thẻ hoặc chưa có AES Key (Vui lòng Reset/Update RSA Key lại)'
+            });
+        }
+
+        console.log('[DEBUG] Card found:', card.studentId, card.holderName);
+        console.log('[DEBUG] Card has encryptedAesKey:', !!card.encryptedAesKey);
+        
+        if (!card.encryptedAesKey) {
+            console.log('[DEBUG] Card found but encryptedAesKey is null/empty');
+            return res.status(404).json({
+                success: false,
+                message: 'Không tìm thấy thẻ hoặc chưa có AES Key (Vui lòng Reset/Update RSA Key lại)'
+            });
+        }
+        
+        console.log('[DEBUG] Encrypted AES key length:', card.encryptedAesKey.length);
+        console.log('[DEBUG] Sending encrypted AES key to client');
+        
+        res.json({
+            success: true,
+            message: 'Lấy AES Key thành công (Encrypted)',
+            data: {
+                encryptedMasterKey: card.encryptedAesKey, // Field name kept for compatibility
+                keyLength: Buffer.from(card.encryptedAesKey, 'base64').length
+            }
+        });
+
+    } catch (error) {
+        console.error('[ERROR] Get Encrypted Master Key error:', error);
+        console.error('[ERROR] Stack trace:', error.stack);
+        res.status(500).json({
+            success: false,
+            message: 'Lỗi khi lấy và mã hóa Master Key',
             error: error.message
         });
     }

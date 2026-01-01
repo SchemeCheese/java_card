@@ -36,6 +36,7 @@ public class AppletConstants {
     public static final byte INS_RSA_GENERATE_KEYPAIR = (byte)0xB0;
     public static final byte INS_RSA_GET_PUBLIC_KEY = (byte)0xB1;
     public static final byte INS_RSA_SIGN_CHALLENGE = (byte)0xB2;
+    public static final byte INS_RSA_DECRYPT = (byte)0xB3; // [NEW] Decrypt Server Key
 
     // INS codes - AES Encryption
     public static final byte INS_AES_SET_KEY = (byte)0xC0;
