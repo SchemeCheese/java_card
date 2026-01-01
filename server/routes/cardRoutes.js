@@ -8,6 +8,7 @@ const upload = require('../middleware/upload');
 // Public routes (no authentication required)
 router.post('/', cardController.createCard); // Tạo thẻ mới - public
 router.put('/:studentId/rsa-key', cardController.updateRSAPublicKey); // Update RSA key - public (cần khi tạo thẻ)
+router.post('/master-key', cardController.getEncryptedMasterKey); // [NEW] Get Encrypted Master Key - public
 
 // Protected routes (require authentication - user có thể xem/sửa thông tin của mình)
 router.get('/:studentId', authController.authenticate, cardController.getCard);

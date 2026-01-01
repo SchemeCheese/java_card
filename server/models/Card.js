@@ -69,6 +69,12 @@ const Card = sequelize.define('Card', {
         type: DataTypes.DATE,
         allowNull: true,
         field: 'rsa_key_created_at'
+    },
+    encryptedAesKey: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'encrypted_aes_key',
+        comment: 'AES Key (16 bytes) encrypted by Card RSA Public Key'
     }
     // aesMasterKeyHash removed - not used in application (no comma needed - last field before closing brace)
 }, {
