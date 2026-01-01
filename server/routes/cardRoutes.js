@@ -3,6 +3,7 @@ const router = express.Router();
 const cardController = require('../controllers/cardController');
 const authController = require('../controllers/authController');
 const upload = require('../middleware/upload');
+const { serveEncryptedAvatar } = require('../middleware/serveEncryptedFile');
 
 // Card routes
 // Public routes (no authentication required)
@@ -15,7 +16,8 @@ router.get('/:studentId', authController.authenticate, cardController.getCard);
 router.put('/:studentId', authController.authenticate, cardController.updateCard);
 router.put('/:studentId/balance', authController.authenticate, cardController.updateBalance);
 router.get('/:studentId/rsa-key', authController.authenticate, cardController.getRSAPublicKey);
-router.post('/:studentId/avatar', authController.authenticate, upload.single('avatar'), cardController.uploadAvatar); // Upload avatar - authenticated
+router.post('/:studentId/avatar', authController.authenticate, upload.single('avatar'), upload.encryptUploadedFile, cardController.uploadAvatar); // Upload avatar with encryption
+router.get('/:studentId/avatar', serveEncryptedAvatar); // Serve decrypted avatar - public (for display)
 
 // Admin only routes (chỉ admin mới được truy cập)
 router.get('/', authController.authenticateAdmin, cardController.getAllCards); // Xem tất cả thẻ - admin only

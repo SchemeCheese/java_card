@@ -33,9 +33,9 @@ app.use(morgan('combined', { stream: morganStream })); // Log HTTP requests to f
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Static file serving - serve uploaded avatars
+// Static file serving - REMOVED for avatars (now served via decryption endpoint)
+// Avatars are encrypted and must be accessed via /api/cards/:studentId/avatar
 const path = require('path');
-app.use('/uploads/avatars', express.static(path.join(__dirname, 'uploads/avatars')));
 
 // Initialize database and start server
 const initializeServer = async () => {

@@ -1,6 +1,7 @@
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { encryptFile } = require('../utils/fileEncryption');
 
 // Tạo thư mục uploads nếu chưa có
 const uploadsDir = path.join(__dirname, '../uploads/avatars');
@@ -25,14 +26,14 @@ const storage = multer.diskStorage({
 
 // File filter - chỉ chấp nhận ảnh
 const fileFilter = (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif/;
+    const allowedTypes = /jpeg|jpg|png|gif|webp|svg/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
 
     if (mimetype && extname) {
         return cb(null, true);
     } else {
-        cb(new Error('Chỉ chấp nhận file ảnh (JPG, PNG, GIF)'));
+        cb(new Error('Chỉ chấp nhận file ảnh (JPG, PNG, GIF, WEBP, SVG)'));
     }
 };
 
@@ -45,5 +46,45 @@ const upload = multer({
     fileFilter: fileFilter
 });
 
+/**
+ * Middleware to encrypt uploaded file
+ * Call this AFTER multer processes the upload
+ */
+async function encryptUploadedFile(req, res, next) {
+    if (!req.file) {
+        return next();
+    }
+
+    try {
+        const originalPath = req.file.path;
+        const tempPath = originalPath + '.tmp';
+
+        // Encrypt the file (original -> temp)
+        await encryptFile(originalPath, tempPath);
+
+        // Replace original with encrypted version
+        fs.unlinkSync(originalPath);
+        fs.renameSync(tempPath, originalPath);
+
+        next();
+    } catch (error) {
+        console.error('[ENCRYPTION] Failed to encrypt uploaded file:', error.message);
+        // Clean up the unencrypted file
+        if (req.file && req.file.path) {
+            try {
+                fs.unlinkSync(req.file.path);
+            } catch (cleanupError) {
+                console.error('[ENCRYPTION] Failed to cleanup unencrypted file:', cleanupError.message);
+            }
+        }
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to encrypt uploaded file',
+            error: error.message
+        });
+    }
+}
+
 module.exports = upload;
+module.exports.encryptUploadedFile = encryptUploadedFile;
 

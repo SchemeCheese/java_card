@@ -274,7 +274,7 @@ exports.uploadAvatar = async (req, res) => {
             message: 'Upload ảnh đại diện thành công',
             data: {
                 imagePath: imagePath,
-                imageUrl: `/uploads/avatars/${filename}`, // URL để truy cập ảnh
+                imageUrl: `/api/cards/${studentId}/avatar`, // URL to decryption endpoint
                 card: card
             }
         });
