@@ -437,8 +437,8 @@ public class BorrowedBooksPage extends JPanel {
                         JOptionPane.showMessageDialog(this, 
                             "Lỗi mượn sách " + bookId + ": " + e.getMessage(), 
                             "Lỗi", JOptionPane.ERROR_MESSAGE);
-                        // Fallback to SimulatorService
-                        String result = simulatorService.borrowBook(studentCode, bookId);
+                        // Fallback to SimulatorService - pass bookName
+                        String result = simulatorService.borrowBook(studentCode, bookId, bookName);
                         if (result == null) {
                             count++;
                             successBooks.add(bookId);
@@ -447,10 +447,10 @@ public class BorrowedBooksPage extends JPanel {
                         }
                     }
                 } else {
-                    // Fallback to SimulatorService
-                    String result = simulatorService.borrowBook(studentCode, bookId);
+                    // Fallback to SimulatorService - pass bookName
+                    String result = simulatorService.borrowBook(studentCode, bookId, bookName);
                     if (result == null) { // Thành công
-                        count++;
+                        count++; 
                         successBooks.add(bookId);
                     } else {
                         JOptionPane.showMessageDialog(this, result, "Lỗi mượn sách " + bookId, JOptionPane.ERROR_MESSAGE);

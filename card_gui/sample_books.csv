@@ -1,0 +1,13 @@
+Mã Sách,Tên Sách,Tác Giả,ISBN,Nhà Xuất Bản,Năm XB,Thể Loại,Mô Tả,Số Lượng,Vị Trí
+VH001,Truyện Kiều,Nguyễn Du,978-604-1-0001,NXB Văn Học,2020,Văn học,Tác phẩm kinh điển của văn học Việt Nam,5,Kệ A1
+VH002,Số Đỏ,Vũ Trọng Phụng,978-604-1-0002,NXB Hội Nhà Văn,2019,Văn học,Tiểu thuyết châm biếm xã hội,3,Kệ A2
+KH001,Vũ Trụ Trong Vỏ Hạt Dẻ,Stephen Hawking,978-604-1-0003,NXB Trẻ,2021,Khoa học,Khám phá vũ trụ và vật lý lượng tử,4,Kệ B1
+KH002,Sapiens - Lược Sử Loài Người,Yuval Noah Harari,978-604-1-0004,NXB Tri Thức,2022,Khoa học,Lịch sử phát triển của loài người,6,Kệ B2
+KN001,7 Thói Quen Hiệu Quả,Stephen Covey,978-604-1-0005,NXB Tổng Hợp,2020,Kỹ năng,Phát triển bản thân và lãnh đạo,8,Kệ C1
+KN002,Nghĩ Giàu Làm Giàu,Napoleon Hill,978-604-1-0006,NXB Lao Động,2019,Kỹ năng,Triết lý thành công trong kinh doanh,5,Kệ C2
+KN003,Đời Ngắn Đừng Ngủ Dài,Robin Sharma,978-604-1-0007,NXB Trẻ,2021,Kỹ năng,Cách sống hạnh phúc và thành công,4,Kệ C3
+LS001,Việt Nam Sử Lược,Trần Trọng Kim,978-604-1-0008,NXB Văn Hóa,2018,Lịch sử,Tóm tắt lịch sử Việt Nam,3,Kệ D1
+LS002,Đại Việt Sử Ký Toàn Thư,Ngô Sĩ Liên,978-604-1-0009,NXB Khoa Học XH,2017,Lịch sử,Bộ sử lớn của Việt Nam,2,Kệ D2
+CN001,Clean Code,Robert C. Martin,978-0-13-235088-4,NXB Công Nghệ,2020,Công nghệ,Viết mã sạch và dễ bảo trì,7,Kệ E1
+CN002,Design Patterns,Gang of Four,978-0-201-63361-0,NXB Công Nghệ,2019,Công nghệ,23 mẫu thiết kế phần mềm kinh điển,4,Kệ E2
+CN003,The Pragmatic Programmer,David Thomas,978-0-13-595705-9,NXB Công Nghệ,2021,Công nghệ,Hướng dẫn trở thành lập trình viên giỏi,5,Kệ E3

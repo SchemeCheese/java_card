@@ -272,14 +272,34 @@ public class SimulatorService {
     }
 
     public String borrowBook(String studentCode, String bookId) {
-        String bookName = null;
-        for (String[] book : AVAILABLE_BOOKS) {
-            if (book[0].equalsIgnoreCase(bookId)) {
-                bookName = book[1];
-                break;
+        return borrowBook(studentCode, bookId, null);
+    }
+    
+    /**
+     * Borrow book with optional book name
+     * If bookName is null, will try to find from AVAILABLE_BOOKS or dynamicBooks
+     */
+    public String borrowBook(String studentCode, String bookId, String bookName) {
+        // Try to find book name from various sources
+        if (bookName == null || bookName.isEmpty()) {
+            // First check AVAILABLE_BOOKS
+            for (String[] book : AVAILABLE_BOOKS) {
+                if (book[0].equalsIgnoreCase(bookId)) {
+                    bookName = book[1];
+                    break;
+                }
+            }
+            // Then check dynamic books
+            if (bookName == null && dynamicBooks.containsKey(bookId.toUpperCase())) {
+                bookName = dynamicBooks.get(bookId.toUpperCase());
             }
         }
-        if (bookName == null) return "Không tìm thấy sách với mã: " + bookId;
+        
+        // If still no book name, add to dynamic books with a placeholder
+        if (bookName == null || bookName.isEmpty()) {
+            bookName = "Sách " + bookId;
+            dynamicBooks.put(bookId.toUpperCase(), bookName);
+        }
 
         java.util.List<models.BorrowedBook> books = studentBooks.getOrDefault(studentCode, new java.util.ArrayList<>());
         for (models.BorrowedBook b : books) {
@@ -329,12 +349,24 @@ public class SimulatorService {
         }
         return null;
     }
+    
+    // Dynamic books storage for books not in AVAILABLE_BOOKS
+    private java.util.Map<String, String> dynamicBooks = new java.util.HashMap<>();
+    
+    /**
+     * Register a dynamic book (from API/Excel import)
+     */
+    public void registerBook(String bookId, String bookName) {
+        dynamicBooks.put(bookId.toUpperCase(), bookName);
+    }
 
     public String getBookName(String bookId) {
+        // Check AVAILABLE_BOOKS first
         for (String[] book : AVAILABLE_BOOKS) {
             if (book[0].equalsIgnoreCase(bookId)) return book[1];
         }
-        return null;
+        // Then check dynamic books
+        return dynamicBooks.get(bookId.toUpperCase());
     }
 
     // --- QUẢN LÝ TÀI CHÍNH (AES Encrypted on Card) ---
