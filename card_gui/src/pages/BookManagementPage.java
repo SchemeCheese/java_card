@@ -21,7 +21,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -33,6 +32,14 @@ import org.apache.poi.hssf.usermodel.HSSFWorkbook;
  * Features: CRUD operations + Import từ Excel
  */
 public class BookManagementPage extends JPanel {
+
+    // Colors
+    private static final Color PRIMARY_BLUE = new Color(59, 130, 246);
+    private static final Color PRIMARY_GREEN = new Color(34, 197, 94);
+    private static final Color PRIMARY_ORANGE = new Color(249, 115, 22);
+    private static final Color PRIMARY_PURPLE = new Color(139, 92, 246);
+    private static final Color PRIMARY_RED = new Color(239, 68, 68);
+    private static final Color PRIMARY_CYAN = new Color(6, 182, 212);
 
     private SimulatorService simulatorService;
     private ApiServiceManager apiManager;
@@ -54,11 +61,10 @@ public class BookManagementPage extends JPanel {
     // Data
     private List<BookInfo> allBooks = new ArrayList<>();
     private List<BookInfo> filteredBooks = new ArrayList<>();
-
-    // Colors
-    private static final Color CARD_SHADOW = new Color(0, 0, 0, 20);
-    private static final Color GRADIENT_START = new Color(79, 70, 229);
-    private static final Color GRADIENT_END = new Color(147, 51, 234);
+    
+    // Static storage to keep data in session
+    private static List<BookInfo> localBooksCache = new ArrayList<>();
+    private static boolean hasInitializedSampleData = false;
 
     public BookManagementPage(SimulatorService simulatorService) {
         this.simulatorService = simulatorService;
@@ -67,65 +73,55 @@ public class BookManagementPage extends JPanel {
 
         setLayout(new BorderLayout());
         setBackground(AppConstants.BACKGROUND);
-        setBorder(new EmptyBorder(20, 20, 20, 20));
-
-        add(createHeader(), BorderLayout.NORTH);
-        add(createMainContent(), BorderLayout.CENTER);
-        add(createPaginationPanel(), BorderLayout.SOUTH);
-
+        
+        initializeUI();
         loadBooks();
+    }
+    
+    private void initializeUI() {
+        JPanel mainPanel = new JPanel();
+        mainPanel.setLayout(new BorderLayout(0, 20));
+        mainPanel.setBackground(AppConstants.BACKGROUND);
+        mainPanel.setBorder(new EmptyBorder(25, 35, 25, 35)); // Use same padding as Dashboard
+        
+        mainPanel.add(createHeader(), BorderLayout.NORTH);
+        mainPanel.add(createMainContent(), BorderLayout.CENTER);
+        mainPanel.add(createPaginationPanel(), BorderLayout.SOUTH);
+        
+        add(mainPanel, BorderLayout.CENTER);
     }
 
     // ==========================================
     // HEADER SECTION
     // ==========================================
     private JPanel createHeader() {
-        JPanel header = new JPanel(new BorderLayout()) {
-            @Override
-            protected void paintComponent(Graphics g) {
-                super.paintComponent(g);
-                Graphics2D g2d = (Graphics2D) g;
-                g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-                GradientPaint gp = new GradientPaint(0, 0, GRADIENT_START, getWidth(), 0, GRADIENT_END);
-                g2d.setPaint(gp);
-                g2d.fillRoundRect(0, 0, getWidth(), getHeight(), 16, 16);
-            }
-        };
-        header.setOpaque(false);
-        header.setBorder(new EmptyBorder(20, 25, 20, 25));
-
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(AppConstants.BACKGROUND);
+        
         // Left: Title
-        JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
-        leftPanel.setOpaque(false);
+        JPanel leftPanel = new JPanel();
+        leftPanel.setLayout(new BoxLayout(leftPanel, BoxLayout.Y_AXIS));
+        leftPanel.setBackground(AppConstants.BACKGROUND);
 
-        JLabel icon = new JLabel("📚");
-        icon.setFont(new Font("Dialog", Font.PLAIN, 28));
+        JLabel title = new JLabel("Kho Sách");
+        title.setFont(new Font("Segoe UI", Font.BOLD, 26));
+        title.setForeground(AppConstants.TEXT_PRIMARY);
 
-        JLabel title = new JLabel("QUẢN LÝ KHO SÁCH");
-        title.setFont(new Font("Segoe UI", Font.BOLD, 22));
-        title.setForeground(Color.WHITE);
-
-        totalBooksLabel = new JLabel("0 cuốn sách");
+        totalBooksLabel = new JLabel("Đang tải dữ liệu...");
         totalBooksLabel.setFont(new Font("Segoe UI", Font.PLAIN, 14));
-        totalBooksLabel.setForeground(new Color(255, 255, 255, 200));
+        totalBooksLabel.setForeground(AppConstants.TEXT_SECONDARY);
 
-        leftPanel.add(icon);
         leftPanel.add(title);
-        leftPanel.add(Box.createHorizontalStrut(15));
+        leftPanel.add(Box.createVerticalStrut(5));
         leftPanel.add(totalBooksLabel);
 
         // Right: Action buttons
-        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
-        rightPanel.setOpaque(false);
+        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 0));
+        rightPanel.setBackground(AppConstants.BACKGROUND);
 
-        JButton addBtn = createHeaderButton("➕ Thêm Sách", new Color(34, 197, 94));
-        addBtn.addActionListener(e -> showAddBookDialog());
-
-        JButton importBtn = createHeaderButton("📂 Import Excel", new Color(59, 130, 246));
-        importBtn.addActionListener(e -> handleImportExcel());
-
-        JButton refreshBtn = createHeaderButton("🔄 Làm Mới", new Color(107, 114, 128));
-        refreshBtn.addActionListener(e -> loadBooks());
+        JButton addBtn = createActionBtn("ADD", "Thêm sách", PRIMARY_GREEN, e -> showAddBookDialog());
+        JButton importBtn = createActionBtn("IMPORT", "Import", PRIMARY_BLUE, e -> handleImportExcel());
+        JButton refreshBtn = createActionBtn("REFRESH", "Làm mới", PRIMARY_PURPLE, e -> loadBooks());
 
         rightPanel.add(addBtn);
         rightPanel.add(importBtn);
@@ -134,38 +130,85 @@ public class BookManagementPage extends JPanel {
         header.add(leftPanel, BorderLayout.WEST);
         header.add(rightPanel, BorderLayout.EAST);
 
-        JPanel wrapper = new JPanel(new BorderLayout());
-        wrapper.setBackground(AppConstants.BACKGROUND);
-        wrapper.setBorder(new EmptyBorder(0, 0, 15, 0));
-        wrapper.add(header, BorderLayout.CENTER);
-
-        return wrapper;
+        return header;
     }
 
-    private JButton createHeaderButton(String text, Color bgColor) {
-        JButton btn = new JButton(text);
-        btn.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        btn.setForeground(Color.WHITE);
-        btn.setBackground(bgColor);
-        btn.setBorder(BorderFactory.createCompoundBorder(
-                new RoundedBorder(bgColor, 1, 8),
-                new EmptyBorder(10, 18, 10, 18)
-        ));
+    private JButton createActionBtn(String iconType, String text, Color color, ActionListener action) {
+        // Create button with custom painting for rounded corners
+        JButton btn = new JButton() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                
+                // Draw rounded background
+                g2.setColor(getBackground());
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 10, 10);
+                
+                g2.dispose();
+                // Don't call super - we handle all painting
+            }
+        };
+        
+        btn.setLayout(new FlowLayout(FlowLayout.CENTER, 6, 6));
+        btn.setBackground(color);
+        btn.setBorder(new EmptyBorder(4, 12, 4, 12));
         btn.setFocusPainted(false);
+        btn.setContentAreaFilled(false); // We paint our own background
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        btn.setOpaque(true);
-
-        btn.addMouseListener(new MouseAdapter() {
+        btn.addActionListener(action);
+        
+        // Icon panel
+        JPanel iconPanel = new JPanel() {
             @Override
-            public void mouseEntered(MouseEvent e) {
-                btn.setBackground(bgColor.darker());
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(Color.WHITE);
+                
+                int cx = getWidth() / 2;
+                int cy = getHeight() / 2;
+                
+                switch (iconType) {
+                    case "ADD":
+                        g2.setStroke(new BasicStroke(2, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                        g2.drawLine(cx, cy - 5, cx, cy + 5);
+                        g2.drawLine(cx - 5, cy, cx + 5, cy);
+                        break;
+                    case "IMPORT":
+                        // Download/import arrow
+                        g2.setStroke(new BasicStroke(2, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                        g2.drawLine(cx, cy - 5, cx, cy + 3);
+                        g2.drawLine(cx - 4, cy, cx, cy + 4);
+                        g2.drawLine(cx + 4, cy, cx, cy + 4);
+                        g2.drawLine(cx - 5, cy + 5, cx + 5, cy + 5);
+                        break;
+                    case "REFRESH":
+                        g2.setStroke(new BasicStroke(2, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                        g2.drawArc(cx - 5, cy - 5, 10, 10, 45, 270);
+                        // Arrow head
+                        g2.drawLine(cx + 4, cy - 5, cx + 4, cy - 1);
+                        g2.drawLine(cx + 4, cy - 5, cx + 1, cy - 3);
+                        break;
+                }
+                g2.dispose();
             }
+            
             @Override
-            public void mouseExited(MouseEvent e) {
-                btn.setBackground(bgColor);
+            public Dimension getPreferredSize() {
+                return new Dimension(16, 16);
             }
-        });
-
+        };
+        iconPanel.setOpaque(false);
+        
+        // Text label
+        JLabel textLabel = new JLabel(text);
+        textLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        textLabel.setForeground(Color.WHITE);
+        
+        btn.add(iconPanel);
+        btn.add(textLabel);
+        
         return btn;
     }
 
@@ -207,8 +250,31 @@ public class BookManagementPage extends JPanel {
         JPanel searchPanel = new JPanel(new BorderLayout(10, 0));
         searchPanel.setBackground(Color.WHITE);
 
-        JLabel searchIcon = new JLabel("🔍");
-        searchIcon.setFont(new Font("Dialog", Font.PLAIN, 16));
+        // Custom drawn search icon (cross-platform compatible)
+        JPanel searchIconPanel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                
+                int cx = getWidth() / 2;
+                int cy = getHeight() / 2;
+                
+                // Draw magnifying glass
+                g2.setColor(AppConstants.TEXT_SECONDARY);
+                g2.setStroke(new BasicStroke(2, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                g2.drawOval(cx - 7, cy - 7, 12, 12); // Circle
+                g2.drawLine(cx + 3, cy + 3, cx + 8, cy + 8); // Handle
+                
+                g2.dispose();
+            }
+            
+            @Override
+            public Dimension getPreferredSize() {
+                return new Dimension(24, 24);
+            }
+        };
+        searchIconPanel.setOpaque(false);
 
         searchField = new JTextField();
         searchField.putClientProperty("JTextField.placeholderText", "Tìm kiếm theo tên sách, tác giả, mã sách...");
@@ -225,7 +291,7 @@ public class BookManagementPage extends JPanel {
             }
         });
 
-        searchPanel.add(searchIcon, BorderLayout.WEST);
+        searchPanel.add(searchIconPanel, BorderLayout.WEST);
         searchPanel.add(searchField, BorderLayout.CENTER);
 
         // Filters
@@ -267,8 +333,7 @@ public class BookManagementPage extends JPanel {
         JPanel pagination = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 15));
         pagination.setBackground(AppConstants.BACKGROUND);
 
-        JButton prevBtn = new JButton("◀ Trước");
-        prevBtn.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        JButton prevBtn = createPaginationBtn("PREV", "Trước");
         prevBtn.addActionListener(e -> {
             if (currentPage > 1) {
                 currentPage--;
@@ -280,8 +345,7 @@ public class BookManagementPage extends JPanel {
         pageLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
         pageLabel.setForeground(AppConstants.TEXT_PRIMARY);
 
-        JButton nextBtn = new JButton("Sau ▶");
-        nextBtn.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        JButton nextBtn = createPaginationBtn("NEXT", "Sau");
         nextBtn.addActionListener(e -> {
             if (currentPage < totalPages) {
                 currentPage++;
@@ -295,14 +359,89 @@ public class BookManagementPage extends JPanel {
 
         return pagination;
     }
+    
+    private JButton createPaginationBtn(String direction, String text) {
+        JButton btn = new JButton() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                
+                // Background
+                g2.setColor(Color.WHITE);
+                g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
+                
+                // Border
+                g2.setColor(AppConstants.BORDER_COLOR);
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
+                
+                g2.dispose();
+            }
+        };
+        
+        btn.setLayout(new FlowLayout(FlowLayout.CENTER, 4, 6));
+        btn.setContentAreaFilled(false);
+        btn.setBorderPainted(false);
+        btn.setFocusPainted(false);
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setPreferredSize(new Dimension(90, 32));
+        
+        // Arrow icon panel
+        JPanel arrowPanel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(AppConstants.TEXT_PRIMARY);
+                
+                int cx = getWidth() / 2;
+                int cy = getHeight() / 2;
+                
+                if ("PREV".equals(direction)) {
+                    // Left arrow
+                    int[] xPoints = {cx + 3, cx - 3, cx + 3};
+                    int[] yPoints = {cy - 5, cy, cy + 5};
+                    g2.fillPolygon(xPoints, yPoints, 3);
+                } else {
+                    // Right arrow
+                    int[] xPoints = {cx - 3, cx + 3, cx - 3};
+                    int[] yPoints = {cy - 5, cy, cy + 5};
+                    g2.fillPolygon(xPoints, yPoints, 3);
+                }
+                
+                g2.dispose();
+            }
+            
+            @Override
+            public Dimension getPreferredSize() {
+                return new Dimension(12, 12);
+            }
+        };
+        arrowPanel.setOpaque(false);
+        
+        // Text label
+        JLabel label = new JLabel(text);
+        label.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        label.setForeground(AppConstants.TEXT_PRIMARY);
+        
+        if ("PREV".equals(direction)) {
+            btn.add(arrowPanel);
+            btn.add(label);
+        } else {
+            btn.add(label);
+            btn.add(arrowPanel);
+        }
+        
+        return btn;
+    }
 
     // ==========================================
     // DATA LOADING & DISPLAY
     // ==========================================
     
     // Static storage để giữ dữ liệu local trong phiên làm việc
-    private static List<BookInfo> localBooksCache = new ArrayList<>();
-    private static boolean hasInitializedSampleData = false;
+    // Static storage để giữ dữ liệu local trong phiên làm việc
+    // (Variables moved to top of class)
     
     private void loadBooks() {
         SwingWorker<List<BookInfo>, Void> worker = new SwingWorker<List<BookInfo>, Void>() {
@@ -451,149 +590,215 @@ public class BookManagementPage extends JPanel {
         JPanel card = new JPanel(new BorderLayout()) {
             @Override
             protected void paintComponent(Graphics g) {
-                super.paintComponent(g);
-                Graphics2D g2d = (Graphics2D) g;
-                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                
+                int w = getWidth();
+                int h = getHeight();
                 
                 // Shadow
-                g2d.setColor(CARD_SHADOW);
-                g2d.fillRoundRect(3, 3, getWidth() - 3, getHeight() - 3, 16, 16);
+                g2.setColor(new Color(0, 0, 0, 10));
+                g2.fillRoundRect(3, 3, w - 3, h - 3, 16, 16);
                 
-                // Card background
-                g2d.setColor(Color.WHITE);
-                g2d.fillRoundRect(0, 0, getWidth() - 6, getHeight() - 6, 16, 16);
+                // Background
+                g2.setColor(Color.WHITE);
+                g2.fillRoundRect(0, 0, w - 3, h - 3, 16, 16);
+                
+                g2.dispose();
             }
         };
         card.setOpaque(false);
         card.setBorder(new EmptyBorder(15, 15, 15, 15));
-        card.setPreferredSize(new Dimension(320, 200));
+        card.setPreferredSize(new Dimension(300, 190));
 
         // Top: Icon + Category badge
         JPanel topPanel = new JPanel(new BorderLayout());
         topPanel.setOpaque(false);
 
-        // Book icon with color based on category
-        JLabel bookIcon = new JLabel(getBookIcon(book.getCategory()));
-        bookIcon.setFont(new Font("Dialog", Font.PLAIN, 40));
-        bookIcon.setHorizontalAlignment(SwingConstants.CENTER);
+        // Custom drawn book icon
+        JPanel iconPanel = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                
+                Color catColor = getCategoryColor(book.getCategory());
+                
+                // Icon bg
+                g2.setColor(new Color(catColor.getRed(), catColor.getGreen(), catColor.getBlue(), 30));
+                g2.fillRoundRect(0, 0, 48, 48, 12, 12);
+                
+                // Book shape
+                g2.setColor(catColor);
+                int cx = 24, cy = 24;
+                
+                // Simple book graphic
+                g2.fillRoundRect(12, 10, 10, 28, 2, 2); // Left page
+                g2.fillRoundRect(24, 10, 10, 28, 2, 2); // Right page
+                g2.setColor(catColor.darker());
+                g2.fillRect(23, 10, 2, 28); // Spine
+                
+                // Decoration lines
+                g2.setColor(new Color(255, 255, 255, 150));
+                g2.drawLine(14, 16, 20, 16);
+                g2.drawLine(14, 20, 20, 20);
+                g2.drawLine(14, 24, 20, 24);
+                
+                g2.drawLine(26, 16, 32, 16);
+                g2.drawLine(26, 20, 32, 20);
+                
+                g2.dispose();
+            }
+            
+            @Override
+            public Dimension getPreferredSize() {
+                return new Dimension(48, 48);
+            }
+        };
+        iconPanel.setOpaque(false);
 
         // Category badge
         JLabel categoryBadge = new JLabel(book.getCategory() != null ? book.getCategory() : "Khác");
-        categoryBadge.setFont(new Font("Segoe UI", Font.BOLD, 10));
-        categoryBadge.setForeground(Color.WHITE);
-        categoryBadge.setBackground(getCategoryColor(book.getCategory()));
+        categoryBadge.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        Color catColor = getCategoryColor(book.getCategory());
+        categoryBadge.setForeground(catColor.darker());
+        categoryBadge.setBackground(new Color(catColor.getRed(), catColor.getGreen(), catColor.getBlue(), 40));
         categoryBadge.setOpaque(true);
-        categoryBadge.setBorder(new EmptyBorder(3, 8, 3, 8));
+        categoryBadge.setBorder(new EmptyBorder(4, 8, 4, 8));
+        
+        // Wrap badge to right align
+        JPanel badgeWrapper = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        badgeWrapper.setOpaque(false);
+        badgeWrapper.add(categoryBadge);
 
-        topPanel.add(bookIcon, BorderLayout.WEST);
-        topPanel.add(categoryBadge, BorderLayout.EAST);
+        topPanel.add(iconPanel, BorderLayout.WEST);
+        topPanel.add(badgeWrapper, BorderLayout.CENTER); // Changed to center to fill space
 
         // Center: Book info
         JPanel infoPanel = new JPanel();
         infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.Y_AXIS));
         infoPanel.setOpaque(false);
-        infoPanel.setBorder(new EmptyBorder(10, 0, 10, 0));
+        infoPanel.setBorder(new EmptyBorder(12, 0, 12, 0));
 
         JLabel titleLabel = new JLabel(book.getTitle());
         titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 15));
         titleLabel.setForeground(AppConstants.TEXT_PRIMARY);
         titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        // Truncate if too long
+        titleLabel.setToolTipText(book.getTitle());
 
         JLabel authorLabel = new JLabel(book.getAuthor());
         authorLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         authorLabel.setForeground(AppConstants.TEXT_SECONDARY);
         authorLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel idLabel = new JLabel("Mã: " + book.getBookId());
+        JLabel idLabel = new JLabel("ID: " + book.getBookId());
         idLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         idLabel.setForeground(AppConstants.TEXT_SECONDARY);
         idLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        // Availability
-        String availText = book.getAvailableCopies() + "/" + book.getTotalCopies() + " có sẵn";
-        Color availColor = book.getAvailableCopies() > 0 ? new Color(34, 197, 94) : new Color(239, 68, 68);
-        JLabel availLabel = new JLabel("● " + availText);
-        availLabel.setFont(new Font("Segoe UI", Font.BOLD, 12));
-        availLabel.setForeground(availColor);
-        availLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-
         infoPanel.add(titleLabel);
-        infoPanel.add(Box.createVerticalStrut(3));
+        infoPanel.add(Box.createVerticalStrut(4));
         infoPanel.add(authorLabel);
-        infoPanel.add(Box.createVerticalStrut(5));
+        infoPanel.add(Box.createVerticalStrut(4));
         infoPanel.add(idLabel);
-        infoPanel.add(Box.createVerticalStrut(5));
-        infoPanel.add(availLabel);
 
-        // Bottom: Action buttons
-        JPanel actionsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        // Bottom: Status & Actions
+        JPanel bottomPanel = new JPanel(new BorderLayout());
+        bottomPanel.setOpaque(false);
+        
+        // Status dot
+        JPanel statusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        statusPanel.setOpaque(false);
+        
+        boolean hasStock = book.getAvailableCopies() > 0;
+        Color statusColor = hasStock ? PRIMARY_GREEN : PRIMARY_RED;
+        String statusText = hasStock ? "Còn " + book.getAvailableCopies() : "Hết sách";
+        
+        JLabel dot = new JLabel("● ");
+        dot.setForeground(statusColor);
+        dot.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        
+        JLabel text = new JLabel(statusText);
+        text.setForeground(statusColor);
+        text.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        
+        statusPanel.add(dot);
+        statusPanel.add(text);
+
+        // Action buttons
+        JPanel actionsPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 5, 0));
         actionsPanel.setOpaque(false);
 
-        JButton editBtn = createSmallButton("✏️ Sửa", new Color(59, 130, 246));
-        editBtn.addActionListener(e -> showEditBookDialog(book));
-
-        JButton deleteBtn = createSmallButton("🗑️ Xóa", new Color(239, 68, 68));
-        deleteBtn.addActionListener(e -> handleDeleteBook(book));
+        JButton editBtn = createIconActionBtn("EDIT", PRIMARY_BLUE, e -> showEditBookDialog(book));
+        JButton deleteBtn = createIconActionBtn("DELETE", PRIMARY_RED, e -> handleDeleteBook(book));
 
         actionsPanel.add(editBtn);
         actionsPanel.add(deleteBtn);
 
+        bottomPanel.add(statusPanel, BorderLayout.WEST);
+        bottomPanel.add(actionsPanel, BorderLayout.EAST);
+
         card.add(topPanel, BorderLayout.NORTH);
         card.add(infoPanel, BorderLayout.CENTER);
-        card.add(actionsPanel, BorderLayout.SOUTH);
-
-        // Hover effect
-        card.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseEntered(MouseEvent e) {
-                card.setBorder(BorderFactory.createCompoundBorder(
-                        new RoundedBorder(AppConstants.PRIMARY_COLOR, 2, 12),
-                        new EmptyBorder(13, 13, 13, 13)
-                ));
-            }
-            @Override
-            public void mouseExited(MouseEvent e) {
-                card.setBorder(new EmptyBorder(15, 15, 15, 15));
-            }
-        });
+        card.add(bottomPanel, BorderLayout.SOUTH);
 
         return card;
     }
 
-    private JButton createSmallButton(String text, Color color) {
-        JButton btn = new JButton(text);
-        btn.setFont(new Font("Segoe UI", Font.PLAIN, 11));
-        btn.setForeground(color);
-        btn.setBackground(new Color(color.getRed(), color.getGreen(), color.getBlue(), 20));
-        btn.setBorder(BorderFactory.createCompoundBorder(
-                new RoundedBorder(color, 1, 6),
-                new EmptyBorder(5, 10, 5, 10)
-        ));
-        btn.setFocusPainted(false);
+    private JButton createIconActionBtn(String type, Color color, ActionListener action) {
+        JButton btn = new JButton();
+        btn.setPreferredSize(new Dimension(28, 28));
+        btn.setBackground(new Color(color.getRed(), color.getGreen(), color.getBlue(), 30));
+        btn.setBorder(null);
+        btn.setBorderPainted(false);
+        btn.setContentAreaFilled(false);
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.setFocusPainted(false);
+        btn.addActionListener(action);
+        
+        btn.setUI(new javax.swing.plaf.basic.BasicButtonUI() {
+            @Override
+            public void paint(Graphics g, JComponent c) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                
+                // Background
+                g2.setColor(c.getBackground());
+                g2.fillOval(0, 0, c.getWidth(), c.getHeight());
+                
+                // Icon
+                g2.setColor(color);
+                int cx = c.getWidth() / 2;
+                int cy = c.getHeight() / 2;
+                
+                if ("EDIT".equals(type)) {
+                    // Draw pencil
+                    g2.rotate(Math.toRadians(45), cx, cy);
+                    g2.fillRect(cx - 2, cy - 6, 4, 10);
+                    g2.fillPolygon(new int[]{cx - 2, cx + 2, cx}, new int[]{cy - 6, cy - 6, cy - 9}, 3);
+                } else if ("DELETE".equals(type)) {
+                    // Draw trash can simplified
+                    g2.fillRect(cx - 4, cy - 4, 8, 9); // bin
+                    g2.fillRect(cx - 5, cy - 6, 10, 2); // lid
+                    g2.fillRect(cx - 2, cy - 7, 4, 1); // handle
+                }
+                
+                g2.dispose();
+            }
+        });
+        
         return btn;
-    }
-
-    private String getBookIcon(String category) {
-        if (category == null) return "📚";
-        switch (category) {
-            case "Văn học": return "📗";
-            case "Khoa học": return "📘";
-            case "Kỹ năng": return "📙";
-            case "Lịch sử": return "📕";
-            case "Công nghệ": return "💻";
-            default: return "📚";
-        }
     }
 
     private Color getCategoryColor(String category) {
         if (category == null) return new Color(107, 114, 128);
         switch (category) {
-            case "Văn học": return new Color(34, 197, 94);
-            case "Khoa học": return new Color(59, 130, 246);
-            case "Kỹ năng": return new Color(249, 115, 22);
-            case "Lịch sử": return new Color(239, 68, 68);
-            case "Công nghệ": return new Color(139, 92, 246);
+            case "Văn học": return PRIMARY_GREEN;
+            case "Khoa học": return PRIMARY_BLUE;
+            case "Kỹ năng": return PRIMARY_ORANGE;
+            case "Lịch sử": return PRIMARY_RED;
+            case "Công nghệ": return PRIMARY_PURPLE;
             default: return new Color(107, 114, 128);
         }
     }
@@ -716,7 +921,7 @@ public class BookManagementPage extends JPanel {
                 
                 // Update local list
                 if (book == null) {
-                    allBooks.add(newBook);
+                    allBooks.add(0, newBook);
                 }
                 
                 // Cập nhật local cache
@@ -738,8 +943,15 @@ public class BookManagementPage extends JPanel {
         btnPanel.add(cancelBtn);
         btnPanel.add(saveBtn);
 
-        dialog.add(formPanel, BorderLayout.CENTER);
+        // Wrap form in scroll pane for smaller screens
+        JScrollPane scrollPane = new JScrollPane(formPanel);
+        scrollPane.setBorder(null);
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        
+        dialog.add(scrollPane, BorderLayout.CENTER);
         dialog.add(btnPanel, BorderLayout.SOUTH);
+        dialog.setMinimumSize(new Dimension(450, 400));
         dialog.setVisible(true);
     }
 
@@ -935,7 +1147,7 @@ public class BookManagementPage extends JPanel {
         header.setBackground(new Color(249, 250, 251));
         header.setBorder(new EmptyBorder(15, 20, 15, 20));
         
-        JLabel titleLabel = new JLabel("📥 Preview dữ liệu import (Chọn sách muốn import)");
+        JLabel titleLabel = new JLabel("Preview dữ liệu import (Chọn sách muốn import)");
         titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 16));
         header.add(titleLabel, BorderLayout.WEST);
         
@@ -966,7 +1178,7 @@ public class BookManagementPage extends JPanel {
 
         for (BookInfo book : books) {
             boolean isDuplicate = existingIds.contains(book.getBookId());
-            String status = isDuplicate ? "⚠️ Trùng mã" : "✅ Sẵn sàng";
+            String status = isDuplicate ? "[!] Trùng mã" : "[OK] Sẵn sàng";
             model.addRow(new Object[]{
                     !isDuplicate, // Pre-select non-duplicates
                     book.getBookId(),
@@ -1049,7 +1261,7 @@ public class BookManagementPage extends JPanel {
                     }
                 }
                 
-                allBooks.add(book);
+                allBooks.add(0, book);
                 existingIds.add(book.getBookId());
                 added++;
             }
@@ -1059,9 +1271,9 @@ public class BookManagementPage extends JPanel {
             totalBooksLabel.setText(allBooks.size() + " cuốn sách");
             filterBooks();
             
-            String msg = "Import hoàn tất!\n✅ Thêm thành công: " + added + " sách";
+            String msg = "Import hoàn tất!\n[+] Thêm thành công: " + added + " sách";
             if (skipped > 0) {
-                msg += "\n⚠️ Bỏ qua (trùng mã): " + skipped + " sách";
+                msg += "\n[!] Bỏ qua (trùng mã): " + skipped + " sách";
             }
             JOptionPane.showMessageDialog(this, msg, "Kết quả Import", JOptionPane.INFORMATION_MESSAGE);
         });
