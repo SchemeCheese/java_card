@@ -2,6 +2,7 @@ package api;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import config.ApiConfig;
 import okhttp3.*;
 
 import java.io.BufferedReader;
@@ -15,7 +16,6 @@ import java.util.function.Consumer;
  * SSE Client để nhận real-time payment updates từ server
  */
 public class SSEClient {
-    private static final String BASE_URL = System.getenv().getOrDefault("API_BASE_URL", "http://localhost:3000");
     
     private final OkHttpClient client;
     private final Gson gson;
@@ -48,7 +48,7 @@ public class SSEClient {
             disconnect();
         }
         
-        String url = BASE_URL + "/api/payment/" + paymentId + "/stream";
+        String url = ApiConfig.getPaymentStreamUrl(paymentId);
         
         Request request = new Request.Builder()
                 .url(url)

@@ -2,6 +2,7 @@ package api;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import config.ApiConfig;
 import okhttp3.*;
 
 import java.io.IOException;
@@ -11,8 +12,7 @@ import java.util.concurrent.TimeUnit;
  * API Service để xử lý VietQR payment
  */
 public class PaymentApiService {
-    private static final String BASE_URL = System.getenv().getOrDefault("API_BASE_URL", "http://localhost:3000");
-    private static final String PAYMENT_ENDPOINT = BASE_URL + "/api/payment";
+    private static final String PAYMENT_ENDPOINT = ApiConfig.getPaymentEndpoint();
     
     private final OkHttpClient client;
     private final Gson gson;
