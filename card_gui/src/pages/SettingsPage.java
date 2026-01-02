@@ -1020,12 +1020,40 @@ public class SettingsPage extends JPanel {
     }
     
     private void handleToggleStatus(CardInfo card) {
-        String action = card.getStatus().equals("Hoạt động") ? "Khóa thẻ" : "Mở khóa thẻ";
+        String currentStatus = card.getStatus();
+        String newStatus = currentStatus.equals("Hoạt động") ? "Khóa" : "Hoạt động";
+        String action = currentStatus.equals("Hoạt động") ? "Khóa thẻ" : "Mở khóa thẻ";
         
-        if (simulatorService != null) {
+        // Try to update on server first
+        if (apiManager != null && apiManager.isServerAvailable()) {
+            try {
+                com.google.gson.JsonObject updates = new com.google.gson.JsonObject();
+                updates.addProperty("status", newStatus);
+                cardApi.updateCard(card.getStudentId(), updates);
+                
+                // Update local cache as well
+                if (simulatorService != null) {
+                    simulatorService.toggleCardStatus(card.getStudentId());
+                }
+                
+                addActivityLog(action, card.getStudentId(), "Thành công");
+                refreshCardList();
+            } catch (Exception ex) {
+                System.err.println("[SettingsPage] Error updating card status: " + ex.getMessage());
+                addActivityLog(action, card.getStudentId(), "Thất bại: " + ex.getMessage());
+                JOptionPane.showMessageDialog(this,
+                    "Không thể cập nhật trạng thái thẻ: " + ex.getMessage(),
+                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+            }
+        } else if (simulatorService != null) {
+            // Fallback to local only if server not available
             simulatorService.toggleCardStatus(card.getStudentId());
-            addActivityLog(action, card.getStudentId(), "Thành công");
+            addActivityLog(action, card.getStudentId(), "Thành công (offline)");
             refreshCardList();
+        } else {
+            JOptionPane.showMessageDialog(this,
+                "Không thể kết nối server hoặc simulator!",
+                "Lỗi", JOptionPane.ERROR_MESSAGE);
         }
     }
     
