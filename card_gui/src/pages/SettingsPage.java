@@ -76,10 +76,6 @@ public class SettingsPage extends JPanel {
         
         // Top row - Create Card + Card Management
         mainPanel.add(createTopRow());
-        mainPanel.add(Box.createVerticalStrut(20));
-        
-        // Activity Log section
-        mainPanel.add(createActivityLogSection());
         
         JScrollPane scroll = new JScrollPane(mainPanel);
         scroll.setBorder(null);
@@ -149,26 +145,18 @@ public class SettingsPage extends JPanel {
     }
     
     private JPanel createTopRow() {
-        JPanel panel = new JPanel();
-        panel.setLayout(new BoxLayout(panel, BoxLayout.X_AXIS));
+        JPanel panel = new JPanel(new BorderLayout(20, 0)); // 20px gap giữa 2 panel
         panel.setBackground(AppConstants.BACKGROUND);
-        panel.setAlignmentX(Component.LEFT_ALIGNMENT);
         
-        // Create new card - fixed width
+        // Create new card - fixed width ở bên trái (WEST)
         JPanel leftCard = createNewCardSection();
-        leftCard.setPreferredSize(new Dimension(420, 580));
-        leftCard.setMinimumSize(new Dimension(400, 560));
-        leftCard.setMaximumSize(new Dimension(450, 600));
+        leftCard.setPreferredSize(new Dimension(400, 580));
         
-        // Card Management - flexible width
+        // Card Management - flexible, chiếm toàn bộ không gian còn lại (CENTER)
         JPanel rightCard = createCardManagementSection();
-        rightCard.setPreferredSize(new Dimension(500, 580));
-        rightCard.setMinimumSize(new Dimension(450, 560));
-        rightCard.setMaximumSize(new Dimension(Integer.MAX_VALUE, 600));
         
-        panel.add(leftCard);
-        panel.add(Box.createHorizontalStrut(20));
-        panel.add(rightCard);
+        panel.add(leftCard, BorderLayout.WEST);
+        panel.add(rightCard, BorderLayout.CENTER);
         
         return panel;
     }
@@ -613,19 +601,16 @@ public class SettingsPage extends JPanel {
     }
     
     private JPanel createCardManagementSection() {
-        JPanel panel = new JPanel();
-        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        JPanel panel = new JPanel(new BorderLayout(0, 12)); // gap 12px vertical
         panel.setBackground(Color.WHITE);
         panel.setBorder(BorderFactory.createCompoundBorder(
             new RoundedBorder(AppConstants.BORDER_COLOR, 1, 12),
             new EmptyBorder(20, 24, 20, 24)
         ));
         
-        // Header
+        // Header - NORTH
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(Color.WHITE);
-        header.setAlignmentX(Component.LEFT_ALIGNMENT);
-        header.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
         
         JLabel title = new JLabel("Quản Lý Thẻ");
         title.setFont(new Font("Segoe UI", Font.BOLD, 18));
@@ -642,27 +627,24 @@ public class SettingsPage extends JPanel {
         header.add(title, BorderLayout.WEST);
         header.add(txtSearch, BorderLayout.EAST);
         
-        panel.add(header);
-        panel.add(Box.createVerticalStrut(12));
+        panel.add(header, BorderLayout.NORTH);
         
-        // Card list panel (scrollable)
+        // Card list panel (scrollable) - CENTER (fill hết không gian)
         cardListPanel = new JPanel();
         cardListPanel.setLayout(new BoxLayout(cardListPanel, BoxLayout.Y_AXIS));
         cardListPanel.setBackground(Color.WHITE);
         
         JScrollPane cardScroll = new JScrollPane(cardListPanel);
         cardScroll.setBorder(null);
-        cardScroll.setAlignmentX(Component.LEFT_ALIGNMENT);
         cardScroll.getVerticalScrollBar().setUnitIncrement(16);
+        cardScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        cardScroll.setPreferredSize(new Dimension(400, 450)); // Giới hạn chiều cao
         
-        panel.add(cardScroll);
+        panel.add(cardScroll, BorderLayout.CENTER);
         
-        // Pagination panel
+        // Pagination panel - SOUTH
         paginationPanel = createPaginationPanel();
-        panel.add(Box.createVerticalStrut(10));
-        panel.add(paginationPanel);
-        
-        panel.add(Box.createVerticalGlue());
+        panel.add(paginationPanel, BorderLayout.SOUTH);
         
         return panel;
     }
@@ -907,8 +889,6 @@ public class SettingsPage extends JPanel {
             new RoundedBorder(AppConstants.BORDER_COLOR, 1, 10),
             new EmptyBorder(10, 12, 10, 12)
         ));
-        panel.setPreferredSize(new Dimension(400, 70));
-        panel.setMinimumSize(new Dimension(350, 70));
         panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 70));
         panel.setAlignmentX(Component.LEFT_ALIGNMENT);
         
@@ -1020,12 +1000,40 @@ public class SettingsPage extends JPanel {
     }
     
     private void handleToggleStatus(CardInfo card) {
-        String action = card.getStatus().equals("Hoạt động") ? "Khóa thẻ" : "Mở khóa thẻ";
+        String currentStatus = card.getStatus();
+        String newStatus = currentStatus.equals("Hoạt động") ? "Khóa" : "Hoạt động";
+        String action = currentStatus.equals("Hoạt động") ? "Khóa thẻ" : "Mở khóa thẻ";
         
-        if (simulatorService != null) {
+        // Try to update on server first
+        if (apiManager != null && apiManager.isServerAvailable()) {
+            try {
+                com.google.gson.JsonObject updates = new com.google.gson.JsonObject();
+                updates.addProperty("status", newStatus);
+                cardApi.updateCard(card.getStudentId(), updates);
+                
+                // Update local cache as well
+                if (simulatorService != null) {
+                    simulatorService.toggleCardStatus(card.getStudentId());
+                }
+                
+                addActivityLog(action, card.getStudentId(), "Thành công");
+                refreshCardList();
+            } catch (Exception ex) {
+                System.err.println("[SettingsPage] Error updating card status: " + ex.getMessage());
+                addActivityLog(action, card.getStudentId(), "Thất bại: " + ex.getMessage());
+                JOptionPane.showMessageDialog(this,
+                    "Không thể cập nhật trạng thái thẻ: " + ex.getMessage(),
+                    "Lỗi", JOptionPane.ERROR_MESSAGE);
+            }
+        } else if (simulatorService != null) {
+            // Fallback to local only if server not available
             simulatorService.toggleCardStatus(card.getStudentId());
-            addActivityLog(action, card.getStudentId(), "Thành công");
+            addActivityLog(action, card.getStudentId(), "Thành công (offline)");
             refreshCardList();
+        } else {
+            JOptionPane.showMessageDialog(this,
+                "Không thể kết nối server hoặc simulator!",
+                "Lỗi", JOptionPane.ERROR_MESSAGE);
         }
     }
     

@@ -1,4 +1,4 @@
-const { BorrowedBook, Card, sequelize } = require('../models');
+const { BorrowedBook, Card, Book, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const {
   parsePagination,
@@ -143,7 +143,7 @@ exports.payOutstandingFines = async (req, res) => {
   } catch (error) {
     try {
       await t.rollback();
-    } catch (_) {}
+    } catch (_) { }
     console.error('Pay outstanding fines error:', error);
     res.status(500).json({
       success: false,
@@ -211,6 +211,23 @@ exports.borrowBook = async (req, res) => {
         success: false,
         message: 'Bạn đã mượn cuốn sách này rồi',
       });
+    }
+
+    // Check if book exists and has available copies
+    const book = await Book.findOne({ where: { bookId } });
+    if (book) {
+      if (book.availableCopies <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Sách này đã hết, không còn bản nào có sẵn',
+        });
+      }
+      // Decrease available copies
+      book.availableCopies -= 1;
+      if (book.availableCopies === 0) {
+        book.status = 'Hết sách';
+      }
+      await book.save();
     }
 
     // Create borrowed book record
@@ -299,6 +316,16 @@ exports.returnBook = async (req, res) => {
     if (card) {
       card.borrowedBooksCount = Math.max(0, card.borrowedBooksCount - 1);
       await card.save();
+    }
+
+    // Increase available copies in Book table
+    const book = await Book.findOne({ where: { bookId: borrowedBook.bookId } });
+    if (book) {
+      book.availableCopies += 1;
+      if (book.status === 'Hết sách' && book.availableCopies > 0) {
+        book.status = 'Có sẵn';
+      }
+      await book.save();
     }
 
     res.json({
