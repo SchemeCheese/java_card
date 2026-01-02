@@ -1087,7 +1087,7 @@ public class SimulatorService {
     
     /**
      * Authenticate card using RSA challenge-response
-     * @param publicKey Public key from server (PEM format)
+     * @param publicKeyPEM Public key from server (PEM format)
      * @return true if card is authenticated
      */
     public boolean authenticateCardWithRSA(String publicKeyPEM) {
@@ -1097,7 +1097,7 @@ public class SimulatorService {
                 return false;
             }
             
-            // First, verify keypair exists on card
+            // First, verify keypair exists on card (needed for signing)
             try {
                 byte[] testKey = getRSAPublicKey();
                 if (testKey == null || testKey.length == 0) {
@@ -1109,25 +1109,27 @@ public class SimulatorService {
                 return false;
             }
             
-            // Get public key from card
-            byte[] cardPublicKeyData = getRSAPublicKey();
-            
-            // Extract modulus and exponent
-            byte[] modulus = new byte[AppletConstants.RSA_MODULUS_SIZE];
-            byte[] exponent = new byte[3];
-            System.arraycopy(cardPublicKeyData, 0, modulus, 0, modulus.length);
-            System.arraycopy(cardPublicKeyData, modulus.length, exponent, 0, exponent.length);
-            
-            // Convert to Java PublicKey
-            PublicKey cardPublicKey = RSAUtility.convertToPublicKey(modulus, exponent);
+            // [FIXED] Use public key from SERVER (not from card)
+            // This prevents card from self-verifying
+            System.out.println("[RSA AUTH] Using public key from SERVER for verification");
+            PublicKey serverPublicKey;
+            try {
+                serverPublicKey = RSAUtility.pemToPublicKey(publicKeyPEM);
+                System.out.println("[RSA AUTH] Successfully parsed public key from server");
+            } catch (Exception pemEx) {
+                System.out.println("[RSA AUTH] Failed to parse PEM public key from server: " + pemEx.getMessage());
+                return false;
+            }
             
             // Generate challenge
             byte[] challenge = RSAUtility.generateChallenge();
+            System.out.println("[RSA AUTH] Generated challenge: " + RSAUtility.bytesToHex(challenge));
             
             // Sign challenge on card - catch 6700 error specifically
             byte[] signature;
             try {
                 signature = signRSAChallenge(challenge);
+                System.out.println("[RSA AUTH] Card signed challenge, signature length: " + signature.length);
             } catch (Exception signEx) {
                 // 6700 error means keypair may not be ready
                 String errorMsg = signEx.getMessage();
@@ -1139,8 +1141,17 @@ public class SimulatorService {
                 throw signEx;
             }
             
-            // Verify signature
-            return RSAUtility.verifySignature(cardPublicKey, challenge, signature);
+            // Verify signature using public key FROM SERVER
+            System.out.println("[RSA AUTH] Verifying signature with public key from server...");
+            boolean verified = RSAUtility.verifySignature(serverPublicKey, challenge, signature);
+            
+            if (verified) {
+                System.out.println("[RSA AUTH] ✓ Signature verified successfully - Card is authentic");
+            } else {
+                System.out.println("[RSA AUTH] ✗ Signature verification FAILED - Card may be fake or keys mismatch");
+            }
+            
+            return verified;
         } catch (Exception e) {
             // Don't print stack trace for expected errors (e.g., 6700)
             String errorMsg = e.getMessage();

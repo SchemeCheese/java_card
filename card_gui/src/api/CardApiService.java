@@ -20,6 +20,13 @@ public class CardApiService {
     }
     
     /**
+     * Constructor with shared ApiClient
+     */
+    public CardApiService(ApiClient apiClient) {
+        this.apiClient = apiClient;
+    }
+    
+    /**
      * Create a new card with full information
      */
     public CardInfo createCard(String studentId, String holderName, String email, String department, String birthDate, String address) throws IOException {

@@ -98,7 +98,7 @@ const BorrowedBook = sequelize.define(
           borrowedBook.overdueDays = Math.ceil(
             diffTime / (1000 * 60 * 60 * 24)
           );
-          borrowedBook.fine = borrowedBook.overdueDays * 5000; // 5000 VND per day
+          borrowedBook.fine = borrowedBook.overdueDays * 50; // 50 VND per day
         }
       },
     },

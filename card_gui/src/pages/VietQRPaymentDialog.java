@@ -278,7 +278,7 @@ public class VietQRPaymentDialog extends JDialog {
         switch (event.getEventType()) {
             case "connected":
                 System.out.println("[SSE] Connected successfully");
-                updateInfoRow(statusPanel, "🔗 Đã kết nối");
+                updateInfoRow(statusPanel, "Đã kết nối");
                 break;
                 
             case "payment-status":

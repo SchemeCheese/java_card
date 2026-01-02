@@ -409,61 +409,109 @@ public class BorrowedBooksPage extends JPanel {
         }
     }
 
+    private static final int MAX_BORROW_LIMIT = 5; // Giới hạn số sách được mượn cùng lúc
+    
     private void handleBorrowBooks() {
         String studentCode = simulatorService.getCurrentStudentCode();
-        int count = 0;
-        List<String> successBooks = new ArrayList<>();
-
-        // Duyệt bảng Kho Sách để tìm dòng được tick
+        
+        // Đếm số sách đang mượn (từ bảng bên trái)
+        int currentBorrowedCount = borrowedModel.getRowCount();
+        
+        // Đếm số sách muốn mượn (số checkbox được tick bên phải)
+        int selectedCount = 0;
+        List<String[]> selectedBooks = new ArrayList<>(); // [bookId, bookName]
+        
         for (int i = 0; i < catalogTable.getRowCount(); i++) {
             boolean isChecked = (Boolean) catalogTable.getValueAt(i, 0);
             if (isChecked) {
+                selectedCount++;
                 String bookId = (String) catalogTable.getValueAt(i, 1);
                 String bookName = (String) catalogTable.getValueAt(i, 2);
-                
-                if (apiManager.isServerAvailable()) {
-                    try {
-                        // Mượn qua API
-                        java.util.Date dueDate = new java.util.Date(
-                            System.currentTimeMillis() + 14 * 24 * 60 * 60 * 1000L // 14 ngày
-                        );
-                        BorrowedBook borrowed = bookApi.borrowBook(studentCode, bookId, bookName, dueDate);
-                        
-                        if (borrowed != null) {
-                            count++;
-                            successBooks.add(bookId);
-                        }
-                    } catch (Exception e) {
-                        JOptionPane.showMessageDialog(this, 
-                            "Lỗi mượn sách " + bookId + ": " + e.getMessage(), 
-                            "Lỗi", JOptionPane.ERROR_MESSAGE);
-                        // Fallback to SimulatorService - pass bookName
-                        String result = simulatorService.borrowBook(studentCode, bookId, bookName);
-                        if (result == null) {
-                            count++;
-                            successBooks.add(bookId);
-                        } else {
-                            JOptionPane.showMessageDialog(this, result, "Lỗi mượn sách " + bookId, JOptionPane.ERROR_MESSAGE);
-                        }
+                selectedBooks.add(new String[]{bookId, bookName});
+            }
+        }
+        
+        // Kiểm tra có chọn sách không
+        if (selectedCount == 0) {
+            JOptionPane.showMessageDialog(this, 
+                "Vui lòng chọn sách muốn mượn bên phải!", 
+                "Thông báo", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        // Kiểm tra giới hạn TRƯỚC khi mượn
+        int totalAfterBorrow = currentBorrowedCount + selectedCount;
+        if (totalAfterBorrow > MAX_BORROW_LIMIT) {
+            int canBorrow = MAX_BORROW_LIMIT - currentBorrowedCount;
+            String message = String.format(
+                "Không thể mượn %d cuốn sách!\n\n" +
+                "• Bạn đang mượn: %d cuốn\n" +
+                "• Bạn muốn mượn thêm: %d cuốn\n" +
+                "• Giới hạn tối đa: %d cuốn\n\n" +
+                "Bạn chỉ có thể mượn thêm tối đa %d cuốn nữa.\n" +
+                "Vui lòng bỏ chọn bớt sách và thử lại.",
+                selectedCount, currentBorrowedCount, selectedCount, MAX_BORROW_LIMIT, Math.max(0, canBorrow)
+            );
+            JOptionPane.showMessageDialog(this, message, "Vượt quá giới hạn mượn sách", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        
+        // Mượn sách (đã pass validation)
+        int successCount = 0;
+        List<String> failedBooks = new ArrayList<>();
+        String lastErrorMessage = null;
+        
+        for (String[] book : selectedBooks) {
+            String bookId = book[0];
+            String bookName = book[1];
+            
+            if (apiManager.isServerAvailable()) {
+                try {
+                    java.util.Date dueDate = new java.util.Date(
+                        System.currentTimeMillis() + 14 * 24 * 60 * 60 * 1000L // 14 ngày
+                    );
+                    BorrowedBook borrowed = bookApi.borrowBook(studentCode, bookId, bookName, dueDate);
+                    
+                    if (borrowed != null) {
+                        successCount++;
                     }
+                } catch (Exception e) {
+                    failedBooks.add(bookName);
+                    lastErrorMessage = e.getMessage();
+                    System.err.println("[BorrowedBooksPage] Error borrowing " + bookId + ": " + e.getMessage());
+                }
+            } else {
+                // Fallback to SimulatorService
+                String result = simulatorService.borrowBook(studentCode, bookId, bookName);
+                if (result == null) {
+                    successCount++;
                 } else {
-                    // Fallback to SimulatorService - pass bookName
-                    String result = simulatorService.borrowBook(studentCode, bookId, bookName);
-                    if (result == null) { // Thành công
-                        count++; 
-                        successBooks.add(bookId);
-                    } else {
-                        JOptionPane.showMessageDialog(this, result, "Lỗi mượn sách " + bookId, JOptionPane.ERROR_MESSAGE);
-                    }
+                    failedBooks.add(bookName);
+                    lastErrorMessage = result;
                 }
             }
         }
 
-        if (count > 0) {
-            JOptionPane.showMessageDialog(this, "Đã mượn thành công " + count + " cuốn sách!", "Thành công", JOptionPane.INFORMATION_MESSAGE);
-            refreshData(); // Refresh để chuyển sách từ Phải sang Trái
-        } else if (successBooks.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Vui lòng chọn sách muốn mượn bên phải!", "Thông báo", JOptionPane.WARNING_MESSAGE);
+        // Hiển thị kết quả
+        if (successCount > 0) {
+            String message = "Mượn thành công " + successCount + " cuốn sách!";
+            if (!failedBooks.isEmpty()) {
+                message += "\n\nMột số sách không mượn được:\n";
+                for (int i = 0; i < Math.min(3, failedBooks.size()); i++) {
+                    message += "  • " + failedBooks.get(i) + "\n";
+                }
+                if (lastErrorMessage != null) {
+                    message += "Lý do: " + lastErrorMessage;
+                }
+            }
+            JOptionPane.showMessageDialog(this, message, 
+                failedBooks.isEmpty() ? "Thành công" : "Kết quả", 
+                failedBooks.isEmpty() ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.WARNING_MESSAGE);
+            refreshData();
+        } else if (!failedBooks.isEmpty()) {
+            JOptionPane.showMessageDialog(this, 
+                "Không thể mượn sách!\nLý do: " + (lastErrorMessage != null ? lastErrorMessage : "Lỗi không xác định"), 
+                "Lỗi", JOptionPane.ERROR_MESSAGE);
         }
     }
 

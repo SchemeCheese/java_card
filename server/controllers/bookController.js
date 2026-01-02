@@ -1,4 +1,4 @@
-const { BorrowedBook, Card, sequelize } = require('../models');
+const { BorrowedBook, Card, Book, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const {
   parsePagination,
@@ -96,14 +96,31 @@ exports.payOutstandingFines = async (req, res) => {
         data: {
           totalPaid: 0,
           paidCount: 0,
+          balanceAfter: parseInt(card.balance),
         },
       });
     }
 
-    // [REMOVED] Balance check - Balance is now managed on card only
-    // Client will handle balance validation and deduction
-    
-    // Mark fines as paid
+    const balanceBefore = parseInt(card.balance);
+    const balanceAfter = balanceBefore - totalPaid;
+
+    const { Transaction } = require('../models');
+    await Transaction.create(
+      {
+        studentId,
+        type: 'Trả phạt',
+        amount: totalPaid,
+        balanceBefore,
+        balanceAfter,
+        status: 'Thành công',
+        description: `Thanh toán tiền phạt (${paidCount} khoản)`,
+      },
+      { transaction: t }
+    );
+
+    card.balance = balanceAfter;
+    await card.save({ transaction: t });
+
     const now = new Date();
     await BorrowedBook.update(
       { finePaid: true, finePaidAt: now },
@@ -120,12 +137,13 @@ exports.payOutstandingFines = async (req, res) => {
       data: {
         totalPaid,
         paidCount,
+        balanceAfter,
       },
     });
   } catch (error) {
     try {
       await t.rollback();
-    } catch (_) {}
+    } catch (_) { }
     console.error('Pay outstanding fines error:', error);
     res.status(500).json({
       success: false,
@@ -193,6 +211,23 @@ exports.borrowBook = async (req, res) => {
         success: false,
         message: 'Bạn đã mượn cuốn sách này rồi',
       });
+    }
+
+    // Check if book exists and has available copies
+    const book = await Book.findOne({ where: { bookId } });
+    if (book) {
+      if (book.availableCopies <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Sách này đã hết, không còn bản nào có sẵn',
+        });
+      }
+      // Decrease available copies
+      book.availableCopies -= 1;
+      if (book.availableCopies === 0) {
+        book.status = 'Hết sách';
+      }
+      await book.save();
     }
 
     // Create borrowed book record
@@ -267,7 +302,7 @@ exports.returnBook = async (req, res) => {
         Math.ceil(diffTime / (1000 * 60 * 60 * 24))
       );
       borrowedBook.overdueDays = overdueDays;
-      borrowedBook.fine = overdueDays * 50; // 50 VND per day (reduced 100x)
+      borrowedBook.fine = overdueDays * 50; // 50 VND per day
     }
 
     borrowedBook.returnDate = now;
@@ -281,6 +316,16 @@ exports.returnBook = async (req, res) => {
     if (card) {
       card.borrowedBooksCount = Math.max(0, card.borrowedBooksCount - 1);
       await card.save();
+    }
+
+    // Increase available copies in Book table
+    const book = await Book.findOne({ where: { bookId: borrowedBook.bookId } });
+    if (book) {
+      book.availableCopies += 1;
+      if (book.status === 'Hết sách' && book.availableCopies > 0) {
+        book.status = 'Có sẵn';
+      }
+      await book.save();
     }
 
     res.json({
@@ -334,7 +379,7 @@ exports.getBorrowedBooksByStudent = async (req, res) => {
         book.status = 'Quá hạn';
         const diffTime = Math.abs(now - book.dueDate);
         book.overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        book.fine = book.overdueDays * 50; // 50 VND per day (reduced 100x)
+        book.fine = book.overdueDays * 50;
         await book.save();
       }
     }

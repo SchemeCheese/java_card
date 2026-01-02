@@ -25,6 +25,13 @@ public class BookApiService {
     }
     
     /**
+     * Constructor with shared ApiClient
+     */
+    public BookApiService(ApiClient apiClient) {
+        this.apiClient = apiClient;
+    }
+    
+    /**
      * Borrow a book
      */
     public BorrowedBook borrowBook(String studentId, String bookId, String bookName, Date dueDate) throws IOException {

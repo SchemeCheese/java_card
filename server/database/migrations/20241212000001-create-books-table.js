@@ -79,10 +79,7 @@ module.exports = {
       }
     });
 
-    // Add indexes
-    await queryInterface.addIndex('books', ['book_id'], {
-      name: 'idx_book_id'
-    });
+    // Add indexes (skip book_id as it already has unique constraint)
     await queryInterface.addIndex('books', ['title'], {
       name: 'idx_title'
     });

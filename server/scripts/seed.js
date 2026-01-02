@@ -234,7 +234,7 @@ const sampleBooks = [
         returnDate: new Date('2024-01-02'),
         status: 'Đã trả',
         overdueDays: 1,
-        fine: 5000
+        fine: 50
     },
     {
         studentId: '2021600004',

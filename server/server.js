@@ -97,10 +97,6 @@ const initializeServer = async () => {
             logger.info(`Server is running on http://localhost:${PORT}`);
             logger.info(`Environment: ${process.env.NODE_ENV}`);
             logger.info(`Timezone: ${process.env.TZ}`);
-            logger.info(`SEPAY Configuration: 
-        - API Key: ${process.env.SEPAY_API_KEY ? 'Set ✅' : 'Missing ❌'}
-        - OAuth Client ID: ${process.env.OAUTH_CLIENT_ID ? 'Set ✅' : 'Missing ❌'}
-    `);
             logger.info(`Database: MySQL (${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME})`);
             logger.info(`Logs directory: ${require('path').join(__dirname, 'logs')}`);
         });

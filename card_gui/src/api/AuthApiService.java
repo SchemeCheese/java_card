@@ -11,7 +11,15 @@ public class AuthApiService {
     private final ApiClient apiClient;
     
     public AuthApiService() {
+        // Create own ApiClient - token is shared via static field in ApiClient
         this.apiClient = new ApiClient();
+    }
+    
+    /**
+     * Constructor with shared ApiClient
+     */
+    public AuthApiService(ApiClient apiClient) {
+        this.apiClient = apiClient;
     }
     
     /**
@@ -35,24 +43,37 @@ public class AuthApiService {
             body.addProperty("challenge", challengeBase64);
             body.addProperty("signature", signatureBase64);
             
+            System.out.println("[AuthApiService] Calling login API for studentId: " + studentId);
+            
             // Gọi API login (không cần token vì đây là login endpoint)
             ApiClient.ApiResponse response = apiClient.post("/auth/login", body);
+            
+            System.out.println("[AuthApiService] Response status: " + response.getStatusCode() + ", success: " + response.isSuccess());
+            System.out.println("[AuthApiService] Response data: " + (response.getData() != null ? response.getData().toString() : "null"));
             
             if (!response.isSuccess()) {
                 System.err.println("[AuthApiService] Login failed: " + response.getMessage());
                 return null;
             }
             
-            // Extract token từ response
-            if (response.getData() != null && response.getData().has("data")) {
-                JsonObject data = response.getData().getAsJsonObject("data");
-                if (data.has("token")) {
-                    String token = data.get("token").getAsString();
-                    System.out.println("[AuthApiService] Login successful, token received");
-                    
-                    // Set token vào ApiClient để dùng cho các request sau
+            // Extract token từ response - getData() trả về toàn bộ JSON response
+            JsonObject responseData = response.getData();
+            if (responseData != null) {
+                // Check if response has nested "data" object (standard API format)
+                if (responseData.has("data") && responseData.get("data").isJsonObject()) {
+                    JsonObject data = responseData.getAsJsonObject("data");
+                    if (data.has("token")) {
+                        String token = data.get("token").getAsString();
+                        System.out.println("[AuthApiService] Login successful, token received from data.token");
+                        apiClient.setAuthToken(token);
+                        return token;
+                    }
+                }
+                // Fallback: check if token is directly in response (alternative format)
+                if (responseData.has("token")) {
+                    String token = responseData.get("token").getAsString();
+                    System.out.println("[AuthApiService] Login successful, token received from root.token");
                     apiClient.setAuthToken(token);
-                    
                     return token;
                 }
             }
