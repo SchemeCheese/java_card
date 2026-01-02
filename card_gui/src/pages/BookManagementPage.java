@@ -99,7 +99,7 @@ public class BookManagementPage extends JPanel {
         leftPanel.setOpaque(false);
 
         JLabel icon = new JLabel("📚");
-        icon.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 28));
+        icon.setFont(new Font("Dialog", Font.PLAIN, 28));
 
         JLabel title = new JLabel("QUẢN LÝ KHO SÁCH");
         title.setFont(new Font("Segoe UI", Font.BOLD, 22));
@@ -208,7 +208,7 @@ public class BookManagementPage extends JPanel {
         searchPanel.setBackground(Color.WHITE);
 
         JLabel searchIcon = new JLabel("🔍");
-        searchIcon.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 16));
+        searchIcon.setFont(new Font("Dialog", Font.PLAIN, 16));
 
         searchField = new JTextField();
         searchField.putClientProperty("JTextField.placeholderText", "Tìm kiếm theo tên sách, tác giả, mã sách...");
@@ -474,7 +474,7 @@ public class BookManagementPage extends JPanel {
 
         // Book icon with color based on category
         JLabel bookIcon = new JLabel(getBookIcon(book.getCategory()));
-        bookIcon.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 40));
+        bookIcon.setFont(new Font("Dialog", Font.PLAIN, 40));
         bookIcon.setHorizontalAlignment(SwingConstants.CENTER);
 
         // Category badge
@@ -651,6 +651,12 @@ public class BookManagementPage extends JPanel {
         btnPanel.setBackground(new Color(249, 250, 251));
 
         JButton cancelBtn = new JButton("Hủy");
+        cancelBtn.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        cancelBtn.setForeground(AppConstants.TEXT_SECONDARY);
+        cancelBtn.setContentAreaFilled(false);
+        cancelBtn.setBorder(null);
+        cancelBtn.setFocusPainted(false);
+        cancelBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         cancelBtn.addActionListener(e -> dialog.dispose());
 
         JButton saveBtn = UIComponentFactory.createPrimaryButton(book == null ? "Thêm Sách" : "Lưu Thay Đổi");
@@ -998,6 +1004,12 @@ public class BookManagementPage extends JPanel {
         btnPanel.setBackground(new Color(249, 250, 251));
 
         JButton cancelBtn = new JButton("Hủy");
+        cancelBtn.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        cancelBtn.setForeground(AppConstants.TEXT_SECONDARY);
+        cancelBtn.setContentAreaFilled(false);
+        cancelBtn.setBorder(null);
+        cancelBtn.setFocusPainted(false);
+        cancelBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         cancelBtn.addActionListener(e -> dialog.dispose());
 
         JButton importBtn = UIComponentFactory.createSuccessButton("Import sách đã chọn");
