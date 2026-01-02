@@ -879,6 +879,22 @@ public class BookManagementPage extends JPanel {
                 int total = Integer.parseInt(totalField.getText().trim());
                 if (total < 1) throw new NumberFormatException();
 
+                // Lưu giá trị cũ TRƯỚC khi thay đổi (vì newBook và book có thể cùng reference)
+                int oldTotal = book != null ? book.getTotalCopies() : 0;
+                int oldAvailable = book != null ? book.getAvailableCopies() : 0;
+                int borrowedCount = oldTotal - oldAvailable; // Số sách đang mượn
+                
+                // Validate: không thể giảm tổng số xuống dưới số đang mượn
+                if (book != null && total < borrowedCount) {
+                    JOptionPane.showMessageDialog(dialog,
+                        String.format("Không thể giảm số lượng xuống %d!\n\n" +
+                            "Hiện có %d cuốn đang được mượn.\n" +
+                            "Số lượng tối thiểu phải là %d.",
+                            total, borrowedCount, borrowedCount),
+                        "Lỗi", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+
                 // Create/Update book
                 BookInfo newBook = book != null ? book : new BookInfo();
                 newBook.setBookId(bookIdField.getText().trim());
@@ -888,7 +904,21 @@ public class BookManagementPage extends JPanel {
                 newBook.setPublisher(publisherField.getText().trim());
                 newBook.setCategory((String) categoryCombo.getSelectedItem());
                 newBook.setTotalCopies(total);
-                newBook.setAvailableCopies(book == null ? total : book.getAvailableCopies());
+                
+                // Tính toán availableCopies khi cập nhật
+                if (book == null) {
+                    // Sách mới: availableCopies = totalCopies
+                    newBook.setAvailableCopies(total);
+                } else {
+                    // Sách cũ: điều chỉnh availableCopies theo sự thay đổi của totalCopies
+                    // newAvailable = total - borrowedCount (giữ nguyên số đang mượn)
+                    int newAvailable = total - borrowedCount;
+                    newBook.setAvailableCopies(newAvailable);
+                    
+                    // Debug
+                    System.out.println("[BookManagement] oldTotal: " + oldTotal + ", oldAvailable: " + oldAvailable + ", borrowed: " + borrowedCount);
+                    System.out.println("[BookManagement] newTotal: " + total + ", newAvailable: " + newAvailable);
+                }
                 newBook.setLocation(locationField.getText().trim());
                 
                 if (!yearField.getText().trim().isEmpty()) {
@@ -913,6 +943,12 @@ public class BookManagementPage extends JPanel {
                         data.addProperty("availableCopies", newBook.getAvailableCopies());
                         data.addProperty("location", newBook.getLocation());
                         
+                        // Debug log
+                        System.out.println("[BookManagement] Updating book: " + newBook.getBookId());
+                        System.out.println("[BookManagement] totalCopies: " + newBook.getTotalCopies());
+                        System.out.println("[BookManagement] availableCopies: " + newBook.getAvailableCopies());
+                        System.out.println("[BookManagement] Sending data: " + data.toString());
+                        
                         if (book == null) {
                             inventoryApi.createBook(data);
                         } else {
@@ -920,6 +956,10 @@ public class BookManagementPage extends JPanel {
                         }
                     } catch (Exception ex) {
                         System.err.println("API Error: " + ex.getMessage());
+                        JOptionPane.showMessageDialog(dialog,
+                            "Lỗi khi lưu lên server: " + ex.getMessage(),
+                            "Lỗi", JOptionPane.ERROR_MESSAGE);
+                        return;
                     }
                 }
                 
@@ -931,13 +971,14 @@ public class BookManagementPage extends JPanel {
                 // Cập nhật local cache
                 updateLocalCache();
                 
-                totalBooksLabel.setText(allBooks.size() + " cuốn sách");
-                filterBooks();
                 dialog.dispose();
                 
                 JOptionPane.showMessageDialog(this, 
                     book == null ? "Thêm sách thành công!" : "Cập nhật thành công!", 
                     "Thành công", JOptionPane.INFORMATION_MESSAGE);
+                
+                // Refresh từ server để đảm bảo dữ liệu đồng bộ
+                loadBooks();
 
             } catch (NumberFormatException ex) {
                 JOptionPane.showMessageDialog(dialog, "Số lượng phải là số dương!", "Lỗi", JOptionPane.ERROR_MESSAGE);
