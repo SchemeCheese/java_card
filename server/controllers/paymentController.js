@@ -132,16 +132,27 @@ class PaymentController {
     try {
       const payload = req.body;
       const signature = req.headers['x-vietqr-signature'] || req.headers['x-signature'] || req.headers['signature'];
+      const authHeader = req.headers['authorization'];
       
       const { logger } = require('../config/logger');
       logger.info('='.repeat(20) + ' WEBHOOK DEBUG ' + '='.repeat(20));
       logger.info(`[Webhook Debug] Payload: ${JSON.stringify(payload, null, 2)}`);
       
-      // 1. Verify webhook signature
-      const isValid = this.verifyWebhookSignature(payload, signature);
-      if (!isValid) {
-        console.error('❌ Invalid webhook signature');
-        return res.status(401).json({ success: false, message: 'Invalid signature' });
+      // Note: SEPAY API Key already verified by oauthMiddleware.verifyApiKey
+      
+      // 1. Verify webhook signature (skip for SEPAY - they only use API Key)
+      const isSepayWebhook = payload.gateway || payload.transferAmount;
+      
+      if (!isSepayWebhook) {
+        // Only verify HMAC signature for non-SEPAY webhooks (VietQR, etc.)
+        const isValid = this.verifyWebhookSignature(payload, signature);
+        if (!isValid) {
+          console.error('Invalid webhook signature');
+          return res.status(401).json({ success: false, message: 'Invalid signature' });
+        }
+        console.log('Webhook signature verified');
+      } else {
+        console.log('Skipping HMAC signature verification for SEPAY (API Key already verified)');
       }
       
       // 2. Parse webhook data (format khác nhau tùy provider)

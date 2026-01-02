@@ -114,15 +114,26 @@ public class TransactionApiService {
         ApiClient.ApiResponse response = apiClient.get("/transactions", queryParams.toString());
         
         if (!response.isSuccess()) {
+            System.err.println("[TransactionAPI] Failed: " + response.getMessage());
             throw new IOException("Failed to get all transactions: " + response.getMessage());
         }
         
         List<Transaction> transactions = new ArrayList<>();
         JsonArray dataArray = response.getData().getAsJsonArray("data");
         
-        for (JsonElement element : dataArray) {
-            transactions.add(parseTransactionFromJson(element.getAsJsonObject()));
+        
+        for (int i = 0; i < dataArray.size(); i++) {
+            Transaction tx = parseTransactionFromJson(dataArray.get(i).getAsJsonObject());
+            transactions.add(tx);
+            
+            // Log first and last transaction
+            if (i == 0 || i == dataArray.size() - 1) {
+                System.out.println("[TransactionAPI] #" + (i + 1) + ": " + 
+                    tx.getType() + " - " + tx.getAmount() + "đ - " + tx.getDate());
+            }
         }
+        
+        System.out.println("[TransactionAPI] Parsed " + transactions.size() + " transactions");
         
         return transactions;
     }

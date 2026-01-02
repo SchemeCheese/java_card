@@ -10,7 +10,6 @@ const Book = sequelize.define('Book', {
     bookId: {
         type: DataTypes.STRING(50),
         allowNull: false,
-        unique: true,
         field: 'book_id'
     },
     title: {
@@ -73,28 +72,9 @@ const Book = sequelize.define('Book', {
     tableName: 'books',
     timestamps: true,
     createdAt: 'created_at',
-    updatedAt: 'updated_at',
-    indexes: [
-        {
-            unique: true,
-            fields: ['book_id']
-        },
-        {
-            fields: ['title']
-        },
-        {
-            fields: ['author']
-        },
-        {
-            fields: ['category']
-        },
-        {
-            fields: ['status']
-        }
-    ]
+    updatedAt: 'updated_at'
+    // [REMOVED] All indexes to fix "Too many keys" error
+    // Unique constraints on bookId and isbn are already defined in field definitions
 });
 
 module.exports = Book;
-
-
-

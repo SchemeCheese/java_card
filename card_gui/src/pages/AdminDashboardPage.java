@@ -507,8 +507,13 @@ public class AdminDashboardPage extends JPanel {
             activities.add(new ActivityItem("Sinh viên", action, b.getBorrowDate(), color));
         }
         
-        activities.sort((a, b) -> b.time.compareTo(a.time));
-        int count = Math.min(6, activities.size());
+        // [REMOVED] Merging transactions with borrowed books and sorting
+        // Server already sorted transactions by created_at DESC
+        // Just display transactions in order from server
+        
+        System.out.println("[AdminDashboard] Displaying " + recentTransactions.size() + " transactions");
+        
+        int count = Math.min(6, recentTransactions.size());
         
         if (count == 0) {
             JLabel emptyLabel = new JLabel("Chưa có hoạt động nào");
@@ -518,9 +523,25 @@ public class AdminDashboardPage extends JPanel {
             emptyLabel.setBorder(new EmptyBorder(30, 0, 30, 0));
             recentActivityPanel.add(emptyLabel);
         } else {
+            // Display transactions in order from server (no sorting)
             for (int i = 0; i < count; i++) {
-                ActivityItem item = activities.get(i);
-                addActivityItem(item.name, item.action, getTimeAgo(item.time), item.color);
+                Transaction t = recentTransactions.get(i);
+                String action = "";
+                Color color = PRIMARY_BLUE;
+                
+                if ("Nạp tiền".equals(t.getType())) {
+                    action = "đã nạp " + currencyFormat.format(t.getAmount()) + "đ vào thẻ";
+                    color = PRIMARY_PURPLE;
+                } else if ("Trả phạt".equals(t.getType())) {
+                    action = "đã trả phạt " + currencyFormat.format(Math.abs(t.getAmount())) + "đ";
+                    color = PRIMARY_RED;
+                } else {
+                    action = t.getType() + " " + currencyFormat.format(t.getAmount()) + "đ";
+                    color = PRIMARY_CYAN;
+                }
+                
+                System.out.println("[AdminDashboard] Displaying #" + (i+1) + ": " + action + " - " + t.getDate());
+                addActivityItem("Người dùng", action, getTimeAgo(t.getDate()), color);
             }
         }
         
