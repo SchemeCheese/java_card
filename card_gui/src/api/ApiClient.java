@@ -7,12 +7,15 @@ import okhttp3.*;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
+import config.ApiConfig;
+
 /**
  * Base HTTP client for API calls
  */
 public class ApiClient {
-    public static final String BASE_URL = "http://localhost:3000/api";
-    public static final String SERVER_URL = "http://localhost:3000"; // Base URL without /api
+    // [UPDATED] Use centralized ApiConfig instead of hardcoded URLs
+    public static final String BASE_URL = ApiConfig.getApiBaseUrl() + "/api";
+    public static final String SERVER_URL = ApiConfig.getApiBaseUrl(); // Base URL without /api
     private static final int CONNECT_TIMEOUT = 2;  // 2s đủ cho local connection
     private static final int READ_TIMEOUT = 5;      // 5s cho local API với MySQL (đủ cho queries phức tạp)
     
