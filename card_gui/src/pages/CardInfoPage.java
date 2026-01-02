@@ -311,8 +311,30 @@ public class CardInfoPage extends JPanel {
         statusLabel.setForeground("Hoạt động".equals(status) ? AppConstants.SUCCESS_COLOR : AppConstants.DANGER_COLOR);
         statusLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
         
-        // Balance
-        long balance = cardInfo != null ? cardInfo.getBalance() : 0;
+        
+        // Balance - [FIX] Lấy số dư real-time từ thẻ thay vì từ cardInfo cached
+        long balance = 0;
+        String currentStudentCode = simulatorService.getCurrentStudentCode();
+        
+        // Ưu tiên lấy từ thẻ nếu đã kết nối và xác thực PIN
+        if (simulatorService.isConnected() && simulatorService.isPinVerified()) {
+            balance = simulatorService.getBalance(currentStudentCode);
+        } else if (apiManager.isServerAvailable()) {
+            try {
+                // Load balance từ API (nếu chưa kết nối thẻ)
+                CardInfo card = cardApi.getCard(currentStudentCode);
+                if (card != null) {
+                    balance = card.getBalance();
+                }
+            } catch (Exception e) {
+                // Fallback to cardInfo if API fails
+                balance = cardInfo != null ? cardInfo.getBalance() : 0;
+            }
+        } else {
+            // Fallback về cardInfo (offline mode)
+            balance = cardInfo != null ? cardInfo.getBalance() : 0;
+        }
+        
         JLabel balanceLabel = new JLabel("Số dư: " + String.format("%,d VND", balance));
         balanceLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
         balanceLabel.setForeground(AppConstants.TEXT_SECONDARY);
