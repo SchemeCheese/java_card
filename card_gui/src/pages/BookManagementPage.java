@@ -844,7 +844,7 @@ public class BookManagementPage extends JPanel {
         addFormRow(formPanel, gbc, row++, "Mã sách *:", bookIdField);
         addFormRow(formPanel, gbc, row++, "Tên sách *:", titleField);
         addFormRow(formPanel, gbc, row++, "Tác giả *:", authorField);
-        addFormRow(formPanel, gbc, row++, "ISBN:", isbnField);
+        addFormRow(formPanel, gbc, row++, "ISBN *:", isbnField);
         addFormRow(formPanel, gbc, row++, "Nhà xuất bản:", publisherField);
         addFormRow(formPanel, gbc, row++, "Năm xuất bản:", yearField);
         addFormRowCombo(formPanel, gbc, row++, "Thể loại:", categoryCombo);
@@ -869,7 +869,8 @@ public class BookManagementPage extends JPanel {
             // Validate
             if (bookIdField.getText().trim().isEmpty() || 
                 titleField.getText().trim().isEmpty() || 
-                authorField.getText().trim().isEmpty()) {
+                authorField.getText().trim().isEmpty() ||
+                isbnField.getText().trim().isEmpty()) {
                 JOptionPane.showMessageDialog(dialog, "Vui lòng điền đầy đủ các trường bắt buộc (*)", "Lỗi", JOptionPane.ERROR_MESSAGE);
                 return;
             }
@@ -901,7 +902,10 @@ public class BookManagementPage extends JPanel {
                         data.addProperty("bookId", newBook.getBookId());
                         data.addProperty("title", newBook.getTitle());
                         data.addProperty("author", newBook.getAuthor());
-                        data.addProperty("isbn", newBook.getIsbn());
+                        // Chỉ gửi ISBN nếu không rỗng để tránh lỗi duplicate với empty string
+                        if (newBook.getIsbn() != null && !newBook.getIsbn().trim().isEmpty()) {
+                            data.addProperty("isbn", newBook.getIsbn());
+                        }
                         data.addProperty("publisher", newBook.getPublisher());
                         data.addProperty("publishYear", newBook.getPublishYear());
                         data.addProperty("category", newBook.getCategory());
