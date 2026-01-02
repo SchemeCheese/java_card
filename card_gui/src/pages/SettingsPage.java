@@ -76,10 +76,6 @@ public class SettingsPage extends JPanel {
         
         // Top row - Create Card + Card Management
         mainPanel.add(createTopRow());
-        mainPanel.add(Box.createVerticalStrut(20));
-        
-        // Activity Log section
-        mainPanel.add(createActivityLogSection());
         
         JScrollPane scroll = new JScrollPane(mainPanel);
         scroll.setBorder(null);
