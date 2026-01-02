@@ -183,19 +183,27 @@ public class RSAUtility {
     
     /**
      * Convert PEM string to PublicKey
+     * Handles both full PEM format (with headers) and Base64-only format
      * 
-     * @param pemString PEM format string
+     * @param pemString PEM format string or Base64 string
      * @return PublicKey object
      */
     public static PublicKey pemToPublicKey(String pemString) {
         try {
-            byte[] keyBytes = java.util.Base64.getDecoder().decode(pemString);
+            // Remove PEM headers/footers if present
+            String base64Key = pemString
+                .replace("-----BEGIN PUBLIC KEY-----", "")
+                .replace("-----END PUBLIC KEY-----", "")
+                .replace("-----BEGIN RSA PUBLIC KEY-----", "")
+                .replace("-----END RSA PUBLIC KEY-----", "")
+                .replaceAll("\\s+", ""); // Remove all whitespace (newlines, spaces)
+            
+            byte[] keyBytes = java.util.Base64.getDecoder().decode(base64Key);
             X509EncodedKeySpec spec = new X509EncodedKeySpec(keyBytes);
             KeyFactory keyFactory = KeyFactory.getInstance("RSA");
             return keyFactory.generatePublic(spec);
         } catch (Exception e) {
-            throw new RuntimeException("Error parsing PEM key", e);
+            throw new RuntimeException("Error parsing PEM key: " + e.getMessage(), e);
         }
     }
 }
-
