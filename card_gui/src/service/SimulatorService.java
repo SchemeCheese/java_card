@@ -614,7 +614,9 @@ public class SimulatorService {
         byte[] salt = Arrays.copyOf(saltResp, AppletConstants.SALT_LENGTH);
         byte[] hash = hashPin(pinChars, salt);
         byte[] verifyCmd = new byte[5 + hash.length];
-        verifyCmd[0] = 0x00; verifyCmd[1] = AppletConstants.INS_VERIFY_PIN; verifyCmd[4] = (byte)hash.length;
+        verifyCmd[0] = 0x00;
+        verifyCmd[1] = AppletConstants.INS_VERIFY_PIN; 
+        verifyCmd[4] = (byte)hash.length;
         System.arraycopy(hash, 0, verifyCmd, 5, hash.length);
         byte[] resp = sendCommand(verifyCmd);
 
