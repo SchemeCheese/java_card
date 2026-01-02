@@ -20,8 +20,8 @@ exports.login = async (req, res) => {
             });
         }
 
-        // Admin bypass - không cần verify RSA
-        if (studentId === ADMIN_STUDENT_ID) {
+        // Admin bypass - không cần verify RSA (case-insensitive)
+        if (studentId.toUpperCase() === ADMIN_STUDENT_ID) {
             console.log(`[AUTH] Admin login: ${studentId}`);
             const token = jwt.sign(
                 { 

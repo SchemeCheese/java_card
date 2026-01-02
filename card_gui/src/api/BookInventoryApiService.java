@@ -19,6 +19,13 @@ public class BookInventoryApiService {
     }
     
     /**
+     * Constructor with shared ApiClient
+     */
+    public BookInventoryApiService(ApiClient apiClient) {
+        this.apiClient = apiClient;
+    }
+    
+    /**
      * Get all books with pagination and filters
      */
     public List<BookInfo> getAllBooks(String category, String status, String search, int page, int limit) throws IOException {

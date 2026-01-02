@@ -23,6 +23,13 @@ public class TransactionApiService {
     }
     
     /**
+     * Constructor with shared ApiClient
+     */
+    public TransactionApiService(ApiClient apiClient) {
+        this.apiClient = apiClient;
+    }
+    
+    /**
      * Create a transaction (simplified - server calculates balance)
      */
     public Transaction createTransaction(String studentId, String type, long amount, String description) throws IOException {

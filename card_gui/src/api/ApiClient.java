@@ -62,6 +62,9 @@ public class ApiClient {
     private Request.Builder addAuthHeader(Request.Builder builder) {
         if (sharedAuthToken != null && !sharedAuthToken.isEmpty()) {
             builder.header("Authorization", "Bearer " + sharedAuthToken);
+            System.out.println("[ApiClient] Added auth header with token: " + sharedAuthToken.substring(0, Math.min(20, sharedAuthToken.length())) + "...");
+        } else {
+            System.out.println("[ApiClient] No auth token available");
         }
         return builder;
     }
@@ -101,19 +104,27 @@ public class ApiClient {
      * POST request
      */
     public ApiResponse post(String endpoint, Object body) throws IOException {
-        String jsonBody = gson.toJson(body);
-        RequestBody requestBody = RequestBody.create(
-                MediaType.parse("application/json; charset=utf-8"),
-                jsonBody
-        );
-        
-        Request.Builder builder = new Request.Builder()
-                .url(BASE_URL + endpoint)
-                .post(requestBody);
-        addAuthHeader(builder);
-        Request request = builder.build();
-        
-        return executeRequest(request);
+        try {
+            String jsonBody = gson.toJson(body);
+            System.out.println("[ApiClient] POST " + endpoint + " with body: " + jsonBody.substring(0, Math.min(100, jsonBody.length())) + "...");
+            
+            RequestBody requestBody = RequestBody.create(
+                    MediaType.parse("application/json; charset=utf-8"),
+                    jsonBody
+            );
+            
+            Request.Builder builder = new Request.Builder()
+                    .url(BASE_URL + endpoint)
+                    .post(requestBody);
+            addAuthHeader(builder);
+            Request request = builder.build();
+            
+            return executeRequest(request);
+        } catch (Exception e) {
+            System.err.println("[ApiClient] POST error: " + e.getMessage());
+            e.printStackTrace();
+            throw new IOException("POST request failed: " + e.getMessage(), e);
+        }
     }
     
     /**
@@ -174,6 +185,8 @@ public class ApiClient {
         try (Response response = client.newCall(request).execute()) {
             String responseBody = response.body() != null ? response.body().string() : "";
             
+            System.out.println("[ApiClient] Response code: " + response.code() + ", body length: " + responseBody.length());
+            
             ApiResponse apiResponse = new ApiResponse();
             apiResponse.setStatusCode(response.code());
             apiResponse.setSuccess(response.isSuccessful());
@@ -183,7 +196,9 @@ public class ApiClient {
                     JsonObject json = gson.fromJson(responseBody, JsonObject.class);
                     apiResponse.setData(json);
                     apiResponse.setMessage(json.has("message") ? json.get("message").getAsString() : "");
+                    System.out.println("[ApiClient] Parsed JSON successfully, has 'data' field: " + json.has("data"));
                 } catch (Exception e) {
+                    System.err.println("[ApiClient] Failed to parse JSON: " + e.getMessage());
                     apiResponse.setRawResponse(responseBody);
                 }
             }

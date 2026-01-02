@@ -721,9 +721,11 @@ public class SettingsPage extends JPanel {
         
         List<CardInfo> cards = new ArrayList<>();
         
-        // Debug: Check server availability
+        // Debug: Check server availability and token
         boolean serverAvailable = (apiManager != null && apiManager.isServerAvailable());
+        String currentToken = (apiManager != null) ? apiManager.getAuthToken() : null;
         System.out.println("[SettingsPage] Server available: " + serverAvailable);
+        System.out.println("[SettingsPage] Auth token present: " + (currentToken != null && !currentToken.isEmpty()));
         
         // Ưu tiên load từ Server API
         if (serverAvailable) {

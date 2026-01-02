@@ -14,7 +14,7 @@ import java.util.List;
 
 /**
  * Main frame for Library Card Management System
- * [FINAL FULL VERSION] Tích hợp chặn tab khi chưa đổi PIN
+ * [UPDATED] Ẩn/hiện tabs dựa trên role sau khi đăng nhập
  */
 public class LibraryCardMainFrame extends JFrame {
     private JPanel mainContentPanel;
@@ -34,7 +34,16 @@ public class LibraryCardMainFrame extends JFrame {
 
     // Tab labels for highlighting
     private Map<String, JLabel> tabLabels = new HashMap<>();
+    private JPanel tabsPanel; // Reference để update tabs
     private String currentPage = "pin";
+    
+    /**
+     * Callback interface để PinPage thông báo khi đăng nhập/đăng xuất
+     */
+    public interface LoginCallback {
+        void onLoginSuccess(String role);
+        void onLogout();
+    }
 
     public LibraryCardMainFrame() {
         super("Library Management System");
@@ -194,14 +203,16 @@ public class LibraryCardMainFrame extends JFrame {
     }
 
     private JPanel createTabsPanel() {
-        JPanel tabsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        tabsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         tabsPanel.setBackground(Color.WHITE);
         tabsPanel.setBorder(new EmptyBorder(0, 30, 0, 30));
 
-        // Định nghĩa các tab và hành động click
-        // Lưu ý: Các tab nhạy cảm sẽ kiểm tra isPinVerified trước khi hiển thị
+        // Chỉ hiện tab PIN khi chưa đăng nhập
         tabLabels.put("pin", createTab("", "PIN & Bảo Mật", true, this::showPinPage));
+        tabsPanel.add(tabLabels.get("pin"));
 
+        // Các tab khác sẽ được thêm sau khi đăng nhập
+        // Tạo sẵn nhưng không add vào panel
         tabLabels.put("cardInfo", createTab("", "Thông Tin Bạn Đọc", false, () -> {
             if (checkPinStatus()) showCardInfoPage();
         }));
@@ -214,17 +225,89 @@ public class LibraryCardMainFrame extends JFrame {
             if (checkPinStatus()) showFinancePage();
         }));
 
+        // Admin tabs
+        tabLabels.put("dashboard", createTab("", "Dashboard", false, () -> {
+            if (checkAdminRole()) showDashboardPage();
+        }));
+
         tabLabels.put("settings", createTab("", "Hệ Thống", false, () -> {
-            checkAdminAccess(); // Chỉ hiện dialog, không chuyển tab
+            checkAdminAccess();
         }));
 
         tabLabels.put("bookManagement", createTab("", "Quản Lý Sách", false, () -> {
-            checkBookManagementAccess(); // Chỉ Admin
+            checkBookManagementAccess();
         }));
 
-        tabLabels.values().forEach(tabsPanel::add);
-
         return tabsPanel;
+    }
+    
+    // Kiểm tra role Admin
+    private boolean checkAdminRole() {
+        if (!simulatorService.isPinVerified()) {
+            JOptionPane.showMessageDialog(this,
+                    "Vui lòng đăng nhập để truy cập chức năng này!",
+                    "Yêu cầu xác thực", JOptionPane.WARNING_MESSAGE);
+            showPinPage();
+            return false;
+        }
+        if (!"Admin".equals(simulatorService.getCurrentRole())) {
+            JOptionPane.showMessageDialog(this,
+                    "Chỉ Admin mới có quyền truy cập!",
+                    "Không có quyền", JOptionPane.WARNING_MESSAGE);
+            return false;
+        }
+        return true;
+    }
+    
+    /**
+     * Cập nhật tabs hiển thị dựa trên role
+     * - Chưa đăng nhập: chỉ hiện tab PIN
+     * - User thường: PIN, Thông Tin, Mượn/Trả, Tài Chính
+     * - Admin: PIN, Dashboard, Hệ Thống, Quản Lý Sách
+     */
+    public void updateTabsForRole(String role) {
+        tabsPanel.removeAll();
+        
+        // Tab PIN luôn hiển thị
+        tabsPanel.add(tabLabels.get("pin"));
+        
+        if (role == null || role.isEmpty()) {
+            // Chưa đăng nhập - chỉ hiện tab PIN
+        } else if ("Admin".equals(role)) {
+            // Admin: Dashboard, Hệ Thống, Quản Lý Sách
+            tabsPanel.add(tabLabels.get("dashboard"));
+            tabsPanel.add(tabLabels.get("settings"));
+            tabsPanel.add(tabLabels.get("bookManagement"));
+            
+            // Tự động chuyển đến Dashboard sau khi đăng nhập Admin
+            SwingUtilities.invokeLater(() -> {
+                showDashboardPage();
+                updateTabHighlights(tabLabels.get("dashboard"));
+            });
+        } else {
+            // User thường: Thông Tin, Mượn/Trả, Tài Chính
+            tabsPanel.add(tabLabels.get("cardInfo"));
+            tabsPanel.add(tabLabels.get("books"));
+            tabsPanel.add(tabLabels.get("finance"));
+        }
+        
+        tabsPanel.revalidate();
+        tabsPanel.repaint();
+    }
+    
+    /**
+     * Callback khi đăng nhập thành công
+     */
+    public void onLoginSuccess(String role) {
+        updateTabsForRole(role);
+    }
+    
+    /**
+     * Callback khi đăng xuất
+     */
+    public void onLogout() {
+        updateTabsForRole(null);
+        updateTabHighlights(tabLabels.get("pin"));
     }
 
     // Hàm kiểm tra trạng thái PIN - QUAN TRỌNG
@@ -377,8 +460,8 @@ public class LibraryCardMainFrame extends JFrame {
     private void showPinPage() {
         currentPage = "pin";
         mainContentPanel.removeAll();
-        // Truyền simulatorService vào PinPage để xử lý logic verify
-        PinPage pinPage = new PinPage(simulatorService);
+        // Truyền simulatorService và callback vào PinPage
+        PinPage pinPage = new PinPage(simulatorService, this::onLoginSuccess, this::onLogout);
         mainContentPanel.add(pinPage);
         mainContentPanel.revalidate();
         mainContentPanel.repaint();
@@ -407,6 +490,30 @@ public class LibraryCardMainFrame extends JFrame {
         mainContentPanel.removeAll();
         FinancePage financePage = new FinancePage(simulatorService);
         mainContentPanel.add(financePage);
+        mainContentPanel.revalidate();
+        mainContentPanel.repaint();
+    }
+
+    private void showDashboardPage() {
+        currentPage = "dashboard";
+        mainContentPanel.removeAll();
+        AdminDashboardPage dashboardPage = new AdminDashboardPage(simulatorService);
+        
+        // Set navigation callbacks for quick action buttons
+        dashboardPage.setNavigationCallbacks(
+            () -> {
+                // Navigate to Settings (He Thong)
+                showSettingsPage();
+                updateTabHighlights(tabLabels.get("settings"));
+            },
+            () -> {
+                // Navigate to Book Management (Quan Ly Sach)
+                showBookManagementPage();
+                updateTabHighlights(tabLabels.get("bookManagement"));
+            }
+        );
+        
+        mainContentPanel.add(dashboardPage);
         mainContentPanel.revalidate();
         mainContentPanel.repaint();
     }

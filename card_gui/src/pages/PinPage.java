@@ -14,12 +14,11 @@ import javax.swing.*;
 import javax.swing.border.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.util.function.Consumer;
 
 /**
  * PIN & Bảo Mật Page - Final Fixed UI
- * [UPDATED]
- * 1. Nút "Mở Khóa (Admin)" rộng hơn (230px).
- * 2. Popup Admin dùng ô nhập chuẩn.
+ * [UPDATED] Thêm callback để thông báo MainFrame khi đăng nhập/đăng xuất
  */
 public class PinPage extends JPanel {
 
@@ -33,6 +32,10 @@ public class PinPage extends JPanel {
     private AuthApiService authApi;
     private JLabel statusLabel;
     private JLabel triesLabel;
+    
+    // Callbacks để thông báo MainFrame
+    private Consumer<String> onLoginSuccess;
+    private Runnable onLogout;
 
     // Các component
     private JTextField studentCodeField;
@@ -46,11 +49,14 @@ public class PinPage extends JPanel {
     private JPasswordField newPinField;
     private JPasswordField confirmPinField;
 
-    public PinPage(SimulatorService simulatorService) {
+    public PinPage(SimulatorService simulatorService, Consumer<String> onLoginSuccess, Runnable onLogout) {
         this.simulatorService = simulatorService;
+        this.onLoginSuccess = onLoginSuccess;
+        this.onLogout = onLogout;
         this.apiManager = ApiServiceManager.getInstance();
         this.cardApi = apiManager.getCardApiService();
-        this.authApi = new AuthApiService();
+        // Use shared ApiClient from apiManager to ensure token is shared
+        this.authApi = new AuthApiService(apiManager.getApiClient());
 
         setLayout(new BorderLayout());
         setBackground(AppConstants.BACKGROUND);
@@ -92,8 +98,12 @@ public class PinPage extends JPanel {
 
         checkInitialStatus();
     }
+    
+    public PinPage(SimulatorService simulatorService) {
+        this(simulatorService, null, null);
+    }
 
-    public PinPage() { this(null); }
+    public PinPage() { this(null, null, null); }
 
     private void checkInitialStatus() {
         if (simulatorService == null) return;
@@ -594,30 +604,32 @@ public class PinPage extends JPanel {
                                     System.out.println("[RSA AUTH] ✓ Authentication successful for student: " + studentCode);
                                     
                                     // Sau khi verify RSA thành công ở client, gọi API login để lấy token
-                                    if (apiManager != null && apiManager.isServerAvailable()) {
-                                        try {
-                                            System.out.println("[AUTH] Calling server login API to get token...");
-                                            // Generate challenge và signature để gửi lên server
-                                            byte[] challenge = utils.RSAUtility.generateChallenge();
-                                            byte[] signature = simulatorService.signRSAChallenge(challenge);
-                                            
-                                            // Gọi API login
-                                            String token = authApi.login(studentCode, challenge, signature);
-                                            if (token != null && !token.isEmpty()) {
-                                                System.out.println("[AUTH] ✓ Token received from server");
-                                                // Token đã được set vào ApiClient trong AuthApiService
-                                                // Share token với các API services khác
-                                                apiManager.setAuthToken(token);
-                                            } else {
-                                                System.out.println("[AUTH] ✗ Failed to get token from server");
-                                            }
-                                        } catch (Exception loginEx) {
-                                            System.out.println("[AUTH] ✗ Error calling login API: " + loginEx.getMessage());
-                                            loginEx.printStackTrace();
-                                            // Không block login nếu API call fail
+                                    // Clear cache để force check lại server availability
+                                    if (apiManager != null) {
+                                        apiManager.getApiClient().clearServerAvailabilityCache();
+                                    }
+                                    
+                                    // Luôn thử gọi login API (không check isServerAvailable vì có thể bị cache sai)
+                                    try {
+                                        System.out.println("[AUTH] Calling server login API to get token...");
+                                        // Generate challenge và signature để gửi lên server
+                                        byte[] challenge = utils.RSAUtility.generateChallenge();
+                                        byte[] signature = simulatorService.signRSAChallenge(challenge);
+                                        
+                                        // Gọi API login
+                                        String token = authApi.login(studentCode, challenge, signature);
+                                        if (token != null && !token.isEmpty()) {
+                                            System.out.println("[AUTH] ✓ Token received from server");
+                                            // Token đã được set vào ApiClient trong AuthApiService
+                                            // Share token với các API services khác
+                                            apiManager.setAuthToken(token);
+                                        } else {
+                                            System.out.println("[AUTH] ✗ Failed to get token from server");
                                         }
-                                    } else {
-                                        System.out.println("[AUTH] Server not available, skipping token request");
+                                    } catch (Exception loginEx) {
+                                        System.out.println("[AUTH] ✗ Error calling login API: " + loginEx.getMessage());
+                                        loginEx.printStackTrace();
+                                        // Không block login nếu API call fail
                                     }
                                 } else {
                                     // Keypair exists but verification failed - possible fake card
@@ -667,6 +679,11 @@ public class PinPage extends JPanel {
                     }
 
                     JOptionPane.showMessageDialog(this, "Đăng nhập thành công!", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                    
+                    // Thông báo MainFrame để cập nhật tabs
+                    if (onLoginSuccess != null) {
+                        onLoginSuccess.accept("normal");
+                    }
                 }
             } else {
                 int remaining = simulatorService.getStudentPinTries(studentCode);
@@ -719,22 +736,33 @@ public class PinPage extends JPanel {
                     System.out.println("Admin login successful (CT060132)");
                     
                     // Gọi API login để lấy token (admin bypass RSA verification)
-                    if (apiManager != null && apiManager.isServerAvailable()) {
-                        try {
-                            System.out.println("[AUTH] Calling server login API for admin...");
-                            // Admin login - không cần challenge/signature, server sẽ bypass
-                            String token = authApi.login(studentCode, new byte[16], new byte[128]);
-                            if (token != null && !token.isEmpty()) {
-                                System.out.println("[AUTH] ✓ Token received for admin");
-                                apiManager.setAuthToken(token);
-                            } else {
-                                System.out.println("[AUTH] ✗ Failed to get token for admin");
-                            }
-                        } catch (Exception loginEx) {
-                            System.out.println("[AUTH] ✗ Error calling login API for admin: " + loginEx.getMessage());
-                            loginEx.printStackTrace();
-                            // Không block login nếu API call fail
+                    // Clear cache để force check lại server availability
+                    if (apiManager != null) {
+                        apiManager.getApiClient().clearServerAvailabilityCache();
+                    }
+                    boolean serverAvailable = (apiManager != null && apiManager.isServerAvailable());
+                    System.out.println("[AUTH] Server available for admin login: " + serverAvailable);
+                    
+                    // Luôn thử gọi login API cho admin (ngay cả khi health check fail)
+                    // Vì server có thể available nhưng health endpoint không hoạt động
+                    try {
+                        System.out.println("[AUTH] Calling server login API for admin...");
+                        System.out.println("[AUTH] authApi instance: " + (authApi != null ? "OK" : "NULL"));
+                        System.out.println("[AUTH] studentCode: " + studentCode);
+                        // Admin login - không cần challenge/signature, server sẽ bypass
+                        String token = authApi.login(studentCode, new byte[16], new byte[128]);
+                        System.out.println("[AUTH] login() returned: " + (token != null ? "token length=" + token.length() : "null"));
+                        if (token != null && !token.isEmpty()) {
+                            System.out.println("[AUTH] ✓ Token received for admin: " + token.substring(0, Math.min(20, token.length())) + "...");
+                            apiManager.setAuthToken(token);
+                            System.out.println("[AUTH] ✓ Token set to ApiServiceManager");
+                        } else {
+                            System.out.println("[AUTH] ✗ Failed to get token for admin (token is null or empty)");
                         }
+                    } catch (Exception loginEx) {
+                        System.out.println("[AUTH] ✗ Error calling login API for admin: " + loginEx.getMessage());
+                        loginEx.printStackTrace();
+                        // Không block login nếu API call fail
                     }
                     
                     setVerifiedState();
@@ -746,6 +774,11 @@ public class PinPage extends JPanel {
                     }
 
                     JOptionPane.showMessageDialog(this, "Đăng nhập Admin thành công!", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+                    
+                    // Thông báo MainFrame để cập nhật tabs cho Admin
+                    if (onLoginSuccess != null) {
+                        onLoginSuccess.accept("Admin");
+                    }
                 } else {
                     int tries = simulatorService.getPinTriesRemaining();
                     triesLabel.setText(tries + "/3");
@@ -799,6 +832,10 @@ public class PinPage extends JPanel {
                     JOptionPane.showMessageDialog(this, "Đổi PIN Admin thành công!\nVui lòng đăng nhập lại.", "Thành công", JOptionPane.INFORMATION_MESSAGE);
                     clearPinFields();
                     setUnverifiedState();
+                    // Thông báo MainFrame để ẩn tabs
+                    if (onLogout != null) {
+                        onLogout.run();
+                    }
                 }
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(this, "Lỗi: " + ex.getMessage(), "Lỗi hệ thống", JOptionPane.ERROR_MESSAGE);
@@ -822,6 +859,10 @@ public class PinPage extends JPanel {
                     // Reset trạng thái để user phải login lại
                     simulatorService.setPinVerified(false);
                     setUnverifiedState();
+                    // Thông báo MainFrame để ẩn tabs
+                    if (onLogout != null) {
+                        onLogout.run();
+                    }
                 } else {
                     JOptionPane.showMessageDialog(this, 
                         "Không thể đổi PIN. Vui lòng thử lại.", 
@@ -999,6 +1040,12 @@ public class PinPage extends JPanel {
         studentCodeField.setForeground(Color.GRAY);
         studentCodeField.setEnabled(true);
         clearPinFields();
+        
+        // Thông báo MainFrame để cập nhật tabs (ẩn các tab không cần thiết)
+        if (onLogout != null) {
+            onLogout.run();
+        }
+        
         JOptionPane.showMessageDialog(this, 
             "Đã đăng xuất thành công!\n" +
             "Kết nối với thẻ đã được ngắt.\n" +
