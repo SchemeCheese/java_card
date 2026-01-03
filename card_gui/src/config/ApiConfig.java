@@ -13,7 +13,7 @@ public class ApiConfig {
     /**
      * Default API URL - THAY ĐỔI URL SERVER TẠI ĐÂY
      */
-    private static final String DEFAULT_API_URL = "https://467a6ba3bc82.ngrok-free.app";
+    private static final String DEFAULT_API_URL = "https://45860a3269b7.ngrok-free.app";
     
     /**
      * Ngrok URL (for development/testing)
